@@ -3,7 +3,11 @@ import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
-import { downloadCertReport, fetchCertReportDetail } from '@/shared/lib/cert-api-client';
+import {
+  certReportItems,
+  downloadCertReport,
+  fetchCertReportDetail,
+} from '@/shared/lib/cert-api-client';
 import type { CertReportResult, CertReportData } from '@/shared/lib/cert-api-client';
 import {
   Download,
@@ -111,7 +115,9 @@ export default function CertRelatorioDetailPage() {
     );
   }
 
-  const results = data.results || [];
+  // O backend grava a lista em `products` (`results` e formato legado). Ler so
+  // `results` deixava a tabela sempre vazia com os cards preenchidos.
+  const results = certReportItems(data);
   const summary = data.summary || { total: 0, ok: 0, missing: 0, inconsistent: 0, not_found: 0 };
 
   const filtered = results.filter((r: CertReportResult) => {
@@ -130,6 +136,8 @@ export default function CertRelatorioDetailPage() {
     URL_NOT_FOUND: 'Não Encontrado',
     API_ERROR: 'Erro de API',
     NO_EXPECTED: 'Sem Certificação',
+    // `validate_single_product` grava EXPIRED; mesmo texto do CertStatusBadge.
+    EXPIRED: 'Vencido',
   };
   const statuses = [...new Set(results.map((r) => r.status))];
   const brands = [...new Set(results.map((r) => r.brand))];
@@ -289,9 +297,21 @@ export default function CertRelatorioDetailPage() {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-12 text-center">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Nenhum resultado encontrado com os filtros aplicados
-                    </p>
+                    {results.length === 0 ? (
+                      <>
+                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                          Esta validação não processou nenhum produto
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                          O arquivo foi gerado sem itens. Rode uma nova validação para obter
+                          resultados.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Nenhum resultado encontrado com os filtros aplicados
+                      </p>
+                    )}
                   </td>
                 </tr>
               ) : (

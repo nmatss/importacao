@@ -5,6 +5,7 @@ import {
   certApiFetch,
   downloadCertApiResource,
   downloadCertReport,
+  fetchCertProducts,
   fetchCertReports,
 } from '@/shared/lib/cert-api-client';
 import { cn, formatDateTime } from '@/shared/lib/utils';
@@ -76,13 +77,43 @@ const BRAND_OPTIONS = [
   { value: '', label: 'Todas as marcas' },
   { value: 'imaginarium', label: 'Imaginarium' },
   { value: 'puket', label: 'Puket' },
-  { value: 'puket_escolares', label: 'Puket Escolares' },
+  // A aba "Puket Escolares" foi abandonada em 11/09/2026 (itens migraram para
+  // "Puket"), mas producao ainda tem linhas com a marca legada. A opcao fica —
+  // sem ela essas linhas so sairiam em "Todas as marcas" — com o rotulo dizendo
+  // que e legado. O valor enviado ao backend NAO muda.
+  { value: 'puket_escolares', label: 'Puket Escolares (legado)' },
 ];
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Quantos produtos a exportacao vai trazer, SEM mudar o contrato do backend:
+ * `/api/reports/export` e `/api/products` montam o mesmo WHERE sobre
+ * `cert_products` (marca normalizada + status, com EXPIRED virando
+ * `is_expired`), entao o `total` da listagem e a contagem de linhas da planilha.
+ *
+ * Devolve `null` quando nao da para saber — o estoque detalhado sai de
+ * `cert_stock` e nao tem endpoint de contagem; a falha da consulta tambem cai
+ * aqui. `null` nunca vira "vazio": sem contagem, nao ha aviso.
+ */
+async function countExportRows(
+  exportType: (typeof EXPORT_TYPES)[number],
+  brand: string,
+): Promise<number | null> {
+  if ('exportUrl' in exportType) return null;
+  try {
+    const filters: { brand?: string; status?: string; per_page: number } = { per_page: 1 };
+    if (brand) filters.brand = brand;
+    if ('status' in exportType.params) filters.status = exportType.params.status;
+    const { total } = await fetchCertProducts(filters);
+    return typeof total === 'number' ? total : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function CertRelatoriosPage() {
@@ -93,6 +124,7 @@ export default function CertRelatoriosPage() {
   const [exporting, setExporting] = useState<string | null>(null);
   const [brandFilter, setBrandFilter] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [emptyExportNotice, setEmptyExportNotice] = useState<string | null>(null);
   const isAdmin = user?.role === 'admin';
 
   const loadReports = useCallback(() => {
@@ -114,12 +146,17 @@ export default function CertRelatoriosPage() {
 
   async function handleExport(exportType: (typeof EXPORT_TYPES)[number]) {
     setExporting(exportType.id);
+    setEmptyExportNotice(null);
+    // Dispara junto com o download; a contagem nunca bloqueia nem derruba a
+    // exportacao (countExportRows engole a propria falha).
+    const rowCountPromise = countExportRows(exportType, brandFilter);
     try {
       const params: Record<string, string> = { ...exportType.params };
       if (brandFilter) params.brand = brandFilter;
 
       const query = new URLSearchParams(params).toString();
-      const baseExportUrl = (exportType as any).exportUrl || '/api/reports/export';
+      const baseExportUrl =
+        'exportUrl' in exportType ? exportType.exportUrl : '/api/reports/export';
       const url = `${baseExportUrl}${query ? `?${query}` : ''}`;
 
       await downloadCertApiResource(
@@ -128,7 +165,18 @@ export default function CertRelatoriosPage() {
         { method: 'POST' },
       );
 
-      toast.success(`Relatorio "${exportType.label}" exportado`);
+      if ((await rowCountPromise) === 0) {
+        const brandLabel = BRAND_OPTIONS.find((b) => b.value === brandFilter)?.label;
+        const scope = brandFilter && brandLabel ? ` para a marca ${brandLabel}` : '';
+        toast.warning(
+          `Nenhum produto em "${exportType.label}"${scope}. A planilha saiu apenas com o cabeçalho.`,
+        );
+        setEmptyExportNotice(
+          `O relatório "${exportType.label}"${scope} não tem nenhum produto: a planilha baixada contém apenas o cabeçalho. Confira a marca selecionada ou escolha outro tipo de relatório.`,
+        );
+      } else {
+        toast.success(`Relatorio "${exportType.label}" exportado`);
+      }
       loadReports();
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
@@ -235,7 +283,10 @@ export default function CertRelatoriosPage() {
           <select
             aria-label="Filtrar marca para exportacao"
             value={brandFilter}
-            onChange={(e) => setBrandFilter(e.target.value)}
+            onChange={(e) => {
+              setBrandFilter(e.target.value);
+              setEmptyExportNotice(null);
+            }}
             className="text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-1.5 text-slate-600 dark:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           >
             {BRAND_OPTIONS.map((b) => (
@@ -296,6 +347,16 @@ export default function CertRelatoriosPage() {
             );
           })}
         </div>
+
+        {emptyExportNotice && (
+          <div
+            role="status"
+            className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{emptyExportNotice}</span>
+          </div>
+        )}
       </div>
 
       {/* Reports History */}
@@ -337,12 +398,12 @@ export default function CertRelatoriosPage() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {reports.map((report, i) => {
+            {reports.map((report) => {
               const format = report.format ?? report.filename.split('.').pop()?.toLowerCase() ?? '';
               const isJson = format === 'json';
               return (
                 <div
-                  key={i}
+                  key={report.filename}
                   className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -355,9 +416,10 @@ export default function CertRelatoriosPage() {
                       </p>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[11px] text-slate-400">
                         {report.date && <span>{formatDateTime(report.date)}</span>}
-                        {report.size_bytes && (
+                        {/* `size_bytes &&` renderizava o numero 0 como texto. */}
+                        {typeof report.size_bytes === 'number' && (
                           <>
-                            <span className="text-slate-200">|</span>
+                            {report.date && <span className="text-slate-200">|</span>}
                             <span>{formatSize(report.size_bytes)}</span>
                           </>
                         )}

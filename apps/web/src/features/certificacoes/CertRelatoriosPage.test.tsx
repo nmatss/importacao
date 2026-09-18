@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { MockAuthProvider, mockUser } from '@/test/mocks/auth';
@@ -13,6 +13,7 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
   return {
     ...actual,
     fetchCertReports: vi.fn(),
+    fetchCertProducts: vi.fn(),
     downloadCertApiResource: vi.fn(),
     downloadCertReport: vi.fn(),
     certApiFetch: vi.fn(),
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 import {
   certApiFetch,
   downloadCertApiResource,
+  fetchCertProducts,
   fetchCertReports,
 } from '@/shared/lib/cert-api-client';
 import CertRelatoriosPage from './CertRelatoriosPage';
@@ -42,6 +44,7 @@ describe('CertRelatoriosPage', () => {
     vi.clearAllMocks();
     vi.mocked(fetchCertReports).mockResolvedValue([]);
     vi.mocked(downloadCertApiResource).mockResolvedValue(undefined);
+    vi.mocked(fetchCertProducts).mockResolvedValue({ products: [], total: 12 });
     vi.mocked(certApiFetch).mockResolvedValue({
       json: vi.fn().mockResolvedValue({ wms: 1, ecommerce_puket: 2, ecommerce_imaginarium: 3 }),
     } as unknown as Response);
@@ -74,6 +77,147 @@ describe('CertRelatoriosPage', () => {
       expect.stringMatching(/^relatorio_stock_/),
       { method: 'POST' },
     );
+  });
+
+  it('marca Puket Escolares como legado sem mudar o valor enviado ao backend', async () => {
+    renderPage();
+    await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+    const select = screen.getByLabelText(/Filtrar marca/i);
+    const option = within(select).getByRole('option', { name: 'Puket Escolares (legado)' });
+    // A aba foi abandonada em 11/09, mas producao ainda tem linhas com a marca:
+    // a opcao continua existindo e o slug nao muda.
+    expect(option).toHaveValue('puket_escolares');
+    expect(
+      within(select).queryByRole('option', { name: 'Puket Escolares' }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(select, 'puket_escolares');
+    await userEvent.click(screen.getByText('Todos os Produtos'));
+
+    await waitFor(() =>
+      expect(downloadCertApiResource).toHaveBeenCalledWith(
+        '/api/reports/export?brand=puket_escolares',
+        expect.stringMatching(/^relatorio_all_/),
+        { method: 'POST' },
+      ),
+    );
+  });
+
+  it('mostra "0 B" para arquivo vazio em vez de vazar um "0" solto na linha', async () => {
+    vi.mocked(fetchCertReports).mockResolvedValue([
+      { filename: 'validation_vazio.json', format: 'json', size_bytes: 0 },
+      { filename: 'validation_cheio.json', format: 'json', size_bytes: 2048 },
+      { filename: 'sem_tamanho.json', format: 'json' },
+    ]);
+
+    renderPage();
+
+    await screen.findByText('validation_vazio');
+    expect(screen.getByText('0 B')).toBeInTheDocument();
+    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    // `{0 && <jsx/>}` renderiza o numero 0 como texto.
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+    // Sem o campo, nao inventa tamanho.
+    const semTamanho = screen.getByText('sem_tamanho').parentElement as HTMLElement;
+    expect(semTamanho).not.toHaveTextContent(/\bB\b|KB|MB/);
+  });
+
+  describe('exportacao sem produtos', () => {
+    it('avisa que o filtro nao tem produtos em vez de dizer so "exportado"', async () => {
+      vi.mocked(fetchCertProducts).mockResolvedValue({ products: [], total: 0 });
+      renderPage();
+      await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+      await userEvent.selectOptions(screen.getByLabelText(/Filtrar marca/i), 'imaginarium');
+      await userEvent.click(screen.getByText(/Vencidos \/ Em Encerramento/i));
+
+      // A contagem usa exatamente os mesmos filtros da exportacao.
+      await waitFor(() =>
+        expect(fetchCertProducts).toHaveBeenCalledWith({
+          brand: 'imaginarium',
+          status: 'EXPIRED',
+          per_page: 1,
+        }),
+      );
+      // O download nao e bloqueado: o backend ja entrega o arquivo.
+      expect(downloadCertApiResource).toHaveBeenCalledWith(
+        '/api/reports/export?status=EXPIRED&brand=imaginarium',
+        expect.stringMatching(/^relatorio_expired_/),
+        { method: 'POST' },
+      );
+      await waitFor(() => expect(toast.warning).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(toast.warning).mock.calls[0][0]).toMatch(/nenhum produto/i);
+      expect(toast.success).not.toHaveBeenCalled();
+
+      const aviso = await screen.findByRole('status');
+      expect(aviso).toHaveTextContent(/Vencidos \/ Em Encerramento/);
+      expect(aviso).toHaveTextContent(/Imaginarium/);
+      expect(aviso).toHaveTextContent(/apenas o cabeçalho/i);
+    });
+
+    it('mantem o toast de sucesso e nao mostra aviso quando ha produtos', async () => {
+      renderPage();
+      await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByText('Todos os Produtos'));
+
+      await waitFor(() =>
+        expect(toast.success).toHaveBeenCalledWith('Relatorio "Todos os Produtos" exportado'),
+      );
+      expect(fetchCertProducts).toHaveBeenCalledWith({ per_page: 1 });
+      expect(toast.warning).not.toHaveBeenCalled();
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('nao derruba a exportacao quando a contagem falha', async () => {
+      vi.mocked(fetchCertProducts).mockRejectedValue(new Error('Erro na API: 500'));
+      renderPage();
+      await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByText('Todos os Produtos'));
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(toast.warning).not.toHaveBeenCalled();
+    });
+
+    it('nao inventa contagem para o estoque detalhado, que nao sai de cert_products', async () => {
+      vi.mocked(fetchCertProducts).mockResolvedValue({ products: [], total: 0 });
+      renderPage();
+      await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByText(/Estoque Detalhado/i));
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+      expect(fetchCertProducts).not.toHaveBeenCalled();
+      expect(toast.warning).not.toHaveBeenCalled();
+    });
+
+    it('limpa o aviso quando a marca muda, para nao descrever um filtro que ja nao e o da tela', async () => {
+      vi.mocked(fetchCertProducts).mockResolvedValueOnce({ products: [], total: 0 });
+      renderPage();
+      await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByText('Todos os Produtos'));
+      await screen.findByRole('status');
+
+      await userEvent.selectOptions(screen.getByLabelText(/Filtrar marca/i), 'puket');
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('limpa o aviso anterior ao exportar de novo', async () => {
+      vi.mocked(fetchCertProducts).mockResolvedValueOnce({ products: [], total: 0 });
+      renderPage();
+      await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByText('Todos os Produtos'));
+      await screen.findByRole('status');
+
+      await userEvent.click(screen.getByText('Todos os Produtos'));
+      await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
   });
 
   it('shows detailed load errors instead of a generic message', async () => {
