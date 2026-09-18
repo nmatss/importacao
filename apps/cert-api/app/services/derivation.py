@@ -506,6 +506,7 @@ def derive_site_status(
     expected_cert_text: str | None,
     certification_type: str | None,
     within_sale_deadline: bool = False,
+    licenciamento_vencido: bool = False,
 ) -> tuple[str, str | None]:
     """Status de conformidade no e-commerce — colapsado em CONFORME | NAO_CONFORME.
 
@@ -525,6 +526,12 @@ def derive_site_status(
     Args:
         within_sale_deadline: produto ainda dentro do prazo de comercialização.
             Default False mantém a leitura conservadora de quem chama sem o prazo.
+        licenciamento_vencido: o fim do licenciamento (Linx) já passou. É a outra
+            metade do "prazo de certificação/licenciamento acabou" acima: produto
+            no site com a licença vencida é NAO_CONFORME mesmo com o certificado
+            ATIVO ou com a venda da certificação ainda permitida. Só data REAL
+            vencida entra aqui — licenciamento PENDENTE/NAO_APLICAVEL não derruba
+            o site (regras R4/R8). Default False = chamador que não conhece o eixo.
 
     Returns:
         Tupla (status, reason). `reason` é None quando CONFORME ou quando o
@@ -557,6 +564,12 @@ def derive_site_status(
         if found_on_site:
             return "NAO_CONFORME", "Certificacao encerrada / fora do prazo com produto no site"
         return "CONFORME", None
+
+    # Licenciamento vencido com o produto no site: a venda está BLOQUEADA pela
+    # trava de licenciamento, então a página no ar é irregular, qualquer que seja
+    # o estado do certificado. Fora do site não há o que corrigir.
+    if licenciamento_vencido and found_on_site:
+        return "NAO_CONFORME", "Licenciamento vencido com produto no site"
 
     # ATIVO, ou ENCERRADO ainda dentro do prazo de comercialização (Eduarda
     # 2026-07-16, caso PI4511Y): a venda é permitida, então o site é julgado pelos
@@ -862,9 +875,6 @@ def compute_status_dimensions(
         today,
         encerramento_status,
     )
-    ss, ss_reason = derive_site_status(
-        last_vs, cs, expected_cert_text, certification_type, within_deadline
-    )
     # Licenciamento vem exclusivamente do Linx. A aplicabilidade é DERIVADA de
     # `grife` + `linx_synced_at`: a coluna `licenciamento_aplicavel` nunca existiu
     # em cert_products, então lê-la sozinha dava PENDENTE para o catálogo inteiro.
@@ -877,6 +887,12 @@ def compute_status_dimensions(
         row.get("linx_synced_at"),
         aplicavel if isinstance(aplicavel, bool) else None,
         today,
+    )
+    # O site precisa enxergar a trava de licenciamento: sem isto, licença vencida
+    # dava status_venda=BLOQUEADA com site_status=CONFORME na mesma linha.
+    ss, ss_reason = derive_site_status(
+        last_vs, cs, expected_cert_text, certification_type, within_deadline,
+        licenciamento_vencido=ls == "VENCIDO",
     )
     cert_reason = None
     validade = parse_data_real(row.get("validade_certificado"))

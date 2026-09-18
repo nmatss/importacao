@@ -1337,6 +1337,85 @@ class TestEncerradoSemPrazoDeCertificacaoNaoLibera:
         assert derivation.derive_status_venda("ENCERRADO", None, today=self.HOJE) == "BLOQUEADA"
 
 
+class TestSiteStatusEnxergaOLicenciamentoVencido:
+    """A docstring de `derive_site_status` promete NAO_CONFORME quando "o prazo de
+    certificacao/LICENCIAMENTO acabou" com o produto no site — e so a metade da
+    certificacao estava implementada: venda BLOQUEADA pela licenca saia CONFORME.
+    """
+
+    HOJE = date(2026, 9, 18)
+    ONTEM = date(2026, 9, 17)
+
+    def _encerrado_permitido(self, **overrides) -> dict:
+        row = {
+            "sku": "PI4511Y",
+            "situacao": "Encerrado",
+            "encerramento_status": "Comerciação Permitida",
+            "last_validation_status": "OK",
+            "grife": "HARRY POTTER",
+            "linx_synced_at": datetime(2026, 9, 18, 6, 0),
+            "linx_fim_licenciamento": self.ONTEM,
+        }
+        row.update(overrides)
+        return row
+
+    def test_encerrado_permitido_com_licenca_vencida_ontem_e_nao_conforme(self):
+        dims = compute_status_dimensions(self._encerrado_permitido(), today=self.HOJE)
+        assert dims["license_status"] == "VENCIDO"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["site_status"] == "NAO_CONFORME"
+        assert "icenciamento vencido" in dims["site_status_reason"]
+
+    def test_ativo_com_licenca_vencida_no_site_e_nao_conforme(self):
+        dims = compute_status_dimensions(
+            self._encerrado_permitido(situacao="Ativo", encerramento_status=None), today=self.HOJE
+        )
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["site_status"] == "NAO_CONFORME"
+
+    def test_licenca_vencida_fora_do_site_continua_conforme(self):
+        """Nao esta no site = nada a corrigir no site, como na certificacao."""
+        dims = compute_status_dimensions(
+            self._encerrado_permitido(last_validation_status="URL_NOT_FOUND"), today=self.HOJE
+        )
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["site_status"] == "CONFORME"
+        assert dims["site_status_reason"] is None
+
+    def test_licenca_que_vence_hoje_ainda_e_conforme(self):
+        """R5: venda permitida ate o fim do dia limite."""
+        dims = compute_status_dimensions(
+            self._encerrado_permitido(linx_fim_licenciamento=self.HOJE), today=self.HOJE
+        )
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["site_status"] == "CONFORME"
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {"linx_fim_licenciamento": None},  # licenciado sem data → PENDENTE
+            {"linx_fim_licenciamento": None, "linx_synced_at": None},  # Linx nao lido
+            {"linx_fim_licenciamento": None, "grife": ""},  # nao aplicavel
+        ],
+    )
+    def test_licenca_pendente_ou_nao_aplicavel_nao_derruba_o_site(self, extra):
+        dims = compute_status_dimensions(self._encerrado_permitido(**extra), today=self.HOJE)
+        assert dims["license_status"] in ("PENDENTE", "NAO_APLICAVEL")
+        assert dims["site_status"] == "CONFORME"
+
+    def test_funcao_pura_aceita_o_parametro_opcional(self):
+        args = ("OK", "ATIVO", "INMETRO", "INMETRO")
+        assert derive_site_status(*args) == ("CONFORME", None)
+        assert derive_site_status(*args, licenciamento_vencido=False) == ("CONFORME", None)
+        status, reason = derive_site_status(*args, licenciamento_vencido=True)
+        assert status == "NAO_CONFORME"
+        assert reason
+        assert derive_site_status(
+            "URL_NOT_FOUND", "ATIVO", "INMETRO", "INMETRO", licenciamento_vencido=True
+        ) == ("CONFORME", None)
+
+
 class TestGuardasEstaticas:
     """Declaracao ausente e bug: prove que a regra esta escrita no codigo."""
 
