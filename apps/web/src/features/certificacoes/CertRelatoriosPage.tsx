@@ -283,7 +283,10 @@ export default function CertRelatoriosPage() {
           <select
             aria-label="Filtrar marca para exportacao"
             value={brandFilter}
-            onChange={(e) => setBrandFilter(e.target.value)}
+            onChange={(e) => {
+              setBrandFilter(e.target.value);
+              setEmptyExportNotice(null);
+            }}
             className="text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-1.5 text-slate-600 dark:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           >
             {BRAND_OPTIONS.map((b) => (

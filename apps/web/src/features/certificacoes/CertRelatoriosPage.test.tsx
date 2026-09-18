@@ -194,6 +194,18 @@ describe('CertRelatoriosPage', () => {
       expect(toast.warning).not.toHaveBeenCalled();
     });
 
+    it('limpa o aviso quando a marca muda, para nao descrever um filtro que ja nao e o da tela', async () => {
+      vi.mocked(fetchCertProducts).mockResolvedValueOnce({ products: [], total: 0 });
+      renderPage();
+      await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByText('Todos os Produtos'));
+      await screen.findByRole('status');
+
+      await userEvent.selectOptions(screen.getByLabelText(/Filtrar marca/i), 'puket');
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
     it('limpa o aviso anterior ao exportar de novo', async () => {
       vi.mocked(fetchCertProducts).mockResolvedValueOnce({ products: [], total: 0 });
       renderPage();
