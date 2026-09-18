@@ -30,6 +30,7 @@ import {
   type CertCertificate,
   type CertCertificateItem,
   type CertLinkResult,
+  type CertSituacao,
   type CertLinxLookup,
   type CertProduct,
   type LinxStatus,
@@ -135,6 +136,10 @@ export default function CertCadastroPage() {
   const [sku, setSku] = useState('');
   const [skusText, setSkusText] = useState('');
   const [validade, setValidade] = useState('');
+  // Certificado ATIVO não tem fim de venda: o campo só existe quando a situação
+  // é ENCERRADO. A tela precisa mandar `situacao` — sem ela o cert-api assume
+  // ATIVO e recusa qualquer cadastro com fim de venda (400).
+  const [situacao, setSituacao] = useState<CertSituacao>('ATIVO');
   const [fimVenda, setFimVenda] = useState('');
   const [vencimento, setVencimento] = useState('');
   const [numero, setNumero] = useState('');
@@ -243,6 +248,7 @@ export default function CertCadastroPage() {
     setSku('');
     setSkusText('');
     setValidade('');
+    setSituacao('ATIVO');
     setFimVenda('');
     setVencimento('');
     setNumero('');
@@ -298,8 +304,17 @@ export default function CertCadastroPage() {
       setError(`Vincule no máximo ${MAX_ITEMS_PER_REQUEST} SKUs por vez.`);
       return;
     }
+    const encerrado = situacao === 'ENCERRADO';
+    if (encerrado && !fimVenda) {
+      setError('Informe o fim de venda do certificado encerrado.');
+      return;
+    }
     if (!validade && !fimVenda) {
-      setError('Informe a validade do certificado ou o fim de venda por certificação.');
+      setError(
+        encerrado
+          ? 'Informe a validade do certificado ou o fim de venda por certificação.'
+          : 'Informe a validade do certificado.',
+      );
       return;
     }
 
@@ -310,7 +325,9 @@ export default function CertCadastroPage() {
         skus: formSkus.length > 0 ? formSkus.join('\n') : undefined,
         brand,
         validade_certificado: validade || undefined,
-        fim_venda: fimVenda || undefined,
+        // Defesa em profundidade: o estado já é limpo ao voltar para Ativo.
+        fim_venda: encerrado ? fimVenda || undefined : undefined,
+        situacao,
         numero_certificado: numero || undefined,
         ocp: ocp || undefined,
         orgao_certificador: orgao || undefined,
@@ -639,22 +656,6 @@ export default function CertCadastroPage() {
             </p>
           </div>
           <div>
-            <label htmlFor="cert-fim-venda" className={labelCls}>
-              Fim de venda (trava)
-            </label>
-            <input
-              id="cert-fim-venda"
-              type="date"
-              className={inputCls}
-              value={fimVenda}
-              onChange={(e) => setFimVenda(e.target.value)}
-            />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Deixe vazio enquanto o certificado estiver ativo. É esta data que trava o faturamento
-              no Linx.
-            </p>
-          </div>
-          <div>
             <label htmlFor="cert-vencimento" className={labelCls}>
               Vencimento do Licenciamento
             </label>
@@ -666,11 +667,60 @@ export default function CertCadastroPage() {
               readOnly
               aria-describedby="cert-licenciamento-origem"
             />
+            <p
+              id="cert-licenciamento-origem"
+              className="mt-1 text-xs text-slate-500 dark:text-slate-400"
+            >
+              Somente leitura: consulte o Linx para atualizar. Este cadastro não altera o
+              licenciamento.
+            </p>
           </div>
-          <p id="cert-licenciamento-origem" className="text-xs text-slate-500">
-            Somente leitura: consulte o Linx para atualizar. Este cadastro não altera o
-            licenciamento.
-          </p>
+          <div>
+            <label htmlFor="cert-situacao" className={labelCls}>
+              Situação do certificado *
+            </label>
+            <select
+              id="cert-situacao"
+              className={inputCls}
+              value={situacao}
+              onChange={(e) => {
+                const next = e.target.value as CertSituacao;
+                setSituacao(next);
+                // Voltar para Ativo descarta a trava: um certificado ativo com
+                // fim de venda é exatamente o que o cert-api recusa.
+                if (next === 'ATIVO') setFimVenda('');
+              }}
+            >
+              <option value="ATIVO">Ativo</option>
+              <option value="ENCERRADO">Encerrado</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Ativo: o produto pode ser vendido, sem data de trava. Encerrado: exige o fim de venda.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="cert-fim-venda" className={labelCls}>
+              Fim de venda (trava)
+            </label>
+            <input
+              id="cert-fim-venda"
+              type="date"
+              className={cn(inputCls, 'disabled:cursor-not-allowed disabled:opacity-50')}
+              value={fimVenda}
+              onChange={(e) => setFimVenda(e.target.value)}
+              disabled={situacao !== 'ENCERRADO'}
+              aria-required={situacao === 'ENCERRADO'}
+              aria-describedby="cert-fim-venda-ajuda"
+            />
+            <p
+              id="cert-fim-venda-ajuda"
+              className="mt-1 text-xs text-slate-500 dark:text-slate-400"
+            >
+              {situacao === 'ENCERRADO'
+                ? 'Obrigatório para certificado encerrado. É esta data que trava o faturamento no Linx.'
+                : 'Certificado ativo não tem fim de venda. Mude a situação para Encerrado para informar a trava.'}
+            </p>
+          </div>
           <div>
             <label htmlFor="cert-numero" className={labelCls}>
               Nº do Certificado

@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -297,6 +299,7 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
 
     await user.type(screen.getByLabelText('SKU do produto *'), 'PI5558Y');
     await user.type(screen.getByLabelText('Validade do Certificado'), '2028-07-27');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
     await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
     await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
 
@@ -306,12 +309,11 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
           sku: 'PI5558Y',
           validade_certificado: '2028-07-27',
           fim_venda: '2026-10-29',
+          situacao: 'ENCERRADO',
         }),
       ),
     );
-    expect(
-      screen.getByText(/Deixe vazio enquanto o certificado estiver ativo/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Fica só no portal/)).toBeInTheDocument();
   });
 
   it('licenciamento é somente leitura e não é enviado ao cadastrar certificado ativo', async () => {
@@ -333,6 +335,7 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
     render(<CertCadastroPage />);
 
     await user.type(screen.getByLabelText('SKU do produto *'), 'PI5558Y');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
     await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
     await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
 
@@ -345,6 +348,7 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
     render(<CertCadastroPage />);
 
     await user.type(screen.getByLabelText('SKUs adicionais (um por linha)'), 'A\nB\nA\nC');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
     await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
     expect(screen.getByText(/3 SKU\(s\) serão vinculados/)).toBeInTheDocument();
 
@@ -525,4 +529,151 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
 
     expect(await screen.findByText(/a data já gravada no Linx permanece/)).toBeInTheDocument();
   });
+});
+
+// ── C1: a tela nunca mandava `situacao`; o back assumia ATIVO e devolvia 400 para
+// todo cadastro com fim de venda. Os testes antigos não pegavam porque o front
+// mocka `createCertificate` e o back sempre mandava ENCERRADO. O contrato abaixo
+// é um arquivo lido pelos DOIS lados (ver test_certificates_routes.py).
+function loadCreateContract(): {
+  encerrado: Record<string, string>;
+  ativo: Record<string, string>;
+} {
+  const relative = 'apps/cert-api/tests/fixtures/certificate_create_contract.json';
+  const candidates = [
+    resolve(process.cwd(), '../cert-api/tests/fixtures/certificate_create_contract.json'),
+    resolve(process.cwd(), relative),
+  ];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (!found) throw new Error(`Nao encontrei ${relative} a partir de ${process.cwd()}`);
+  return JSON.parse(readFileSync(found, 'utf-8'));
+}
+
+/** O que a tela mandou de fato: sem chaves `undefined` e sem o PDF ausente. */
+function sentPayload(): Record<string, unknown> {
+  const input = mockedCreate.mock.calls[0][0] as unknown as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined && value !== null),
+  );
+}
+
+describe('CertCadastroPage — situação do certificado (contrato com o cert-api)', () => {
+  const contract = loadCreateContract();
+
+  beforeEach(() => {
+    mockedFetchCertificates.mockReset();
+    mockedCreate.mockReset();
+    mockedFetchCertificates.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    mockedCreate.mockResolvedValue(certificate());
+  });
+
+  it('certificado ativo: fim de venda desabilitado e payload igual ao contrato', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    expect(screen.getByLabelText('Situação do certificado *')).toHaveValue('ATIVO');
+    expect(screen.getByLabelText('Fim de venda (trava)')).toBeDisabled();
+
+    await user.type(screen.getByLabelText('SKU do produto *'), contract.ativo.sku);
+    await user.type(
+      screen.getByLabelText('Validade do Certificado'),
+      contract.ativo.validade_certificado,
+    );
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+    expect(sentPayload()).toEqual(contract.ativo);
+  });
+
+  it('certificado encerrado: habilita o fim de venda e o payload é o do contrato', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), contract.encerrado.sku);
+    await user.type(
+      screen.getByLabelText('Validade do Certificado'),
+      contract.encerrado.validade_certificado,
+    );
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
+    const fimVenda = screen.getByLabelText('Fim de venda (trava)');
+    expect(fimVenda).toBeEnabled();
+    expect(fimVenda).toHaveAttribute('aria-required', 'true');
+    await user.type(fimVenda, contract.encerrado.fim_venda);
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+    expect(sentPayload()).toEqual(contract.encerrado);
+  });
+
+  it('voltar para Ativo limpa o fim de venda e ele não é enviado', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), 'PI5555Y');
+    await user.type(screen.getByLabelText('Validade do Certificado'), '2027-03-22');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
+    await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ATIVO');
+
+    expect(screen.getByLabelText('Fim de venda (trava)')).toHaveValue('');
+    expect(screen.getByLabelText('Fim de venda (trava)')).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+    expect(sentPayload()).toEqual(contract.ativo);
+  });
+
+  it('encerrado sem fim de venda não é enviado: o erro aparece na tela', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), 'PI5558Y');
+    await user.type(screen.getByLabelText('Validade do Certificado'), '2028-07-27');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    expect(
+      await screen.findByText(/Informe o fim de venda do certificado encerrado/),
+    ).toBeInTheDocument();
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('createCertificate (cliente real) — multipart do contrato', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(['ativo', 'encerrado'] as const)(
+    'monta exatamente os campos do contrato (%s)',
+    async (scenario) => {
+      const contract = loadCreateContract()[scenario];
+      const actual = await vi.importActual<typeof import('@/shared/lib/cert-api-client')>(
+        '@/shared/lib/cert-api-client',
+      );
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ id: 'c1', linx_status: 'disabled' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      await actual.createCertificate({ ...contract, pdf: null } as Parameters<
+        typeof actual.createCertificate
+      >[0]);
+
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/api\/certificates$/);
+      expect(init.method).toBe('POST');
+      const sent = Object.fromEntries((init.body as FormData).entries());
+      expect(sent).toEqual(contract);
+    },
+  );
 });

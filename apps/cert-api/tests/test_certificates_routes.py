@@ -1,5 +1,8 @@
 """Integration tests for the certificate registration routes (DB and Linx mocked)."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 CREATE_URL = "/api/certificates"
@@ -292,6 +295,44 @@ async def test_create_active_certificate_without_fim_venda_writes_no_date(
     )
     assert resp.status_code == 200
     assert linx.call_args.args[2] is None
+
+
+# C1 — contrato tela <-> cert-api. O arquivo e lido tambem por
+# apps/web/src/features/certificacoes/CertCadastroPage.test.tsx, que afirma que
+# a tela monta EXATAMENTE estes campos. Antes, a tela nao mandava `situacao`, o
+# back assumia ATIVO e todo cadastro com fim de venda devolvia 400 — e nenhum
+# teste pegava, porque cada lado testava contra a propria suposicao.
+_CREATE_CONTRACT = json.loads(
+    (Path(__file__).parent / "fixtures" / "certificate_create_contract.json").read_text(encoding="utf-8")
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scenario", ["ativo", "encerrado"])
+async def test_create_accepts_exactly_the_payload_the_page_builds(
+    test_client, api_key_headers, mocker, scenario
+):
+    payload = _CREATE_CONTRACT[scenario]
+    cur, _ = _mock_certificates_env(mocker)
+    resp = await test_client.post(CREATE_URL, data=payload, headers=api_key_headers)
+    assert resp.status_code == 200, resp.text
+    insert = next(c for c in cur.execute.call_args_list if "INSERT INTO cert_certificates" in str(c.args[0]))
+    assert insert.args[1][1:6] == [
+        payload["sku"], payload["brand"], payload["validade_certificado"],
+        payload.get("fim_venda"), payload["situacao"],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_with_fim_venda_but_without_situacao_is_refused(test_client, api_key_headers, mocker):
+    """Reproducao do C1: o payload que a tela ANTIGA mandava (sem `situacao`)."""
+    legacy = {k: v for k, v in _CREATE_CONTRACT["encerrado"].items() if k != "situacao"}
+    cur, linx = _mock_certificates_env(mocker)
+    resp = await test_client.post(CREATE_URL, data=legacy, headers=api_key_headers)
+    assert resp.status_code == 400
+    assert "ativo nao possui fim de venda" in resp.json()["detail"]
+    cur.execute.assert_not_called()
+    linx.assert_not_called()
 
 
 @pytest.mark.asyncio
