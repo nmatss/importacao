@@ -21,9 +21,11 @@ def _product(
     available: int = 5,
     componentes: str | None = None,
     link_text: str = "puzzle-teste",
+    description: str | None = None,
+    extra_properties: list[dict] | None = None,
 ) -> dict:
     """Produto no formato da intelligent-search da VTEX."""
-    properties = []
+    properties = list(extra_properties or [])
     if cert_text is not None:
         properties.append({"name": "Certificação Inmetro", "values": [cert_text]})
     if componentes is not None:
@@ -32,6 +34,7 @@ def _product(
         "productId": product_id,
         "productName": name,
         "linkText": link_text,
+        **({"description": description} if description is not None else {}),
         "properties": properties,
         "items": [
             {
@@ -120,6 +123,83 @@ def test_reason_states_the_evidence_and_keeps_pieces_informative():
     _, ok = ma.classify("Puzzle", None, "CE-BRI/ICEPEX-N 01264-25")
     assert "autenticidade não verificada" in ok
     assert "não informada" in ok
+
+
+# --- K3: a evidencia nao mora so na especificacao "Certificacao Inmetro" ------
+
+
+@pytest.mark.parametrize("spec_name", ["Registro Inmetro", "Inmetro", "Selo INMETRO", "Nº Inmetro"])
+def test_any_specification_named_inmetro_counts_as_evidence(spec_name):
+    product = _product(
+        "Puzzle 100 pecas",
+        extra_properties=[{"name": spec_name, "values": ["CE-BRI/ICEPEX-N 01264-25"]}],
+    )
+    assert "01264-25" in ma.extract_inmetro_text(product)
+    assert ma.audit_products([product])[0]["verdict"] == "OK"
+
+
+def test_specification_whose_value_mentions_inmetro_counts_as_evidence():
+    product = _product(
+        "Puzzle 100 pecas",
+        extra_properties=[
+            {"name": "Informações adicionais", "values": ["Certificado Inmetro OCP 0012 registro 004512/2024"]}
+        ],
+    )
+    assert ma.audit_products([product])[0]["verdict"] == "OK"
+
+
+def test_specification_inside_specification_groups_counts_as_evidence():
+    product = _product("Puzzle 100 pecas")
+    product["specificationGroups"] = [
+        {"specifications": [{"name": "Registro Inmetro", "values": ["004512/2024"]}]}
+    ]
+    assert ma.audit_products([product])[0]["verdict"] == "OK"
+
+
+def test_certificate_cited_in_the_description_is_not_reported_as_missing():
+    product = _product(
+        "Puzzle 100 pecas",
+        description=(
+            "<p>Quebra-cabeca ilustrado, caixa 30x20 cm.</p>"
+            "<p>Produto certificado pelo <b>Inmetro</b>: CE-BRI/ICEPEX-N 01264-25.</p>"
+        ),
+    )
+    row = ma.audit_products([product])[0]
+    assert row["verdict"] == "OK"
+    assert "01264-25" in row["cert_text"]
+    assert "<" not in row["cert_text"]
+
+
+def test_description_that_mentions_inmetro_without_a_number_goes_to_review():
+    product = _product("Puzzle 100 pecas", description="Brinquedo com selo do Inmetro.")
+    assert ma.audit_products([product])[0]["verdict"] == "REVISAR"
+
+
+def test_number_far_from_the_inmetro_mention_does_not_become_ok():
+    """So o trecho em volta de "inmetro" e evidencia: um numero solto no fim de
+    uma descricao longa (SAC, lote, dimensao) nao pode virar OK."""
+    product = _product(
+        "Puzzle 100 pecas",
+        description="Selo Inmetro na embalagem. " + ("Texto de venda sem relacao. " * 30) + "SAC 0800-2024",
+    )
+    assert ma.audit_products([product])[0]["verdict"] == "REVISAR"
+
+
+def test_description_without_any_inmetro_mention_stays_not_ok():
+    product = _product("Puzzle 100 pecas", description="Caixa 1234/2024, lote 0800-2024.")
+    row = ma.audit_products([product])[0]
+    assert row["verdict"] == "NAO_OK"
+    assert row["cert_text"] is None
+
+
+def test_empty_certification_specification_is_not_evidence():
+    product = _product("Puzzle 100 pecas", cert_text="  ")
+    assert ma.audit_products([product])[0]["verdict"] == "NAO_OK"
+
+
+def test_evidence_text_is_bounded():
+    product = _product("Puzzle 100 pecas", cert_text="Inmetro " + "x" * 5000)
+    assert len(ma.extract_inmetro_text(product)) <= ma._MAX_EVIDENCE_CHARS
 
 
 def test_house_only_product_is_out_of_scope():

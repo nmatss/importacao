@@ -38,7 +38,16 @@ _PAGE_SIZE = 50
 _MAX_PAGES = 20
 
 _PIECES_RE = re.compile(r"(\d[\d.\s]*)\s*pe[çc]as?\b", re.IGNORECASE)
-_INMETRO_SPEC_NAMES = ("certificação inmetro", "certificacao inmetro")
+# K3: a evidencia pode estar em QUALQUER especificacao cujo nome ou valor cite
+# "inmetro" ("Certificacao Inmetro", "Registro Inmetro", "Inmetro"...) ou na
+# descricao do produto — nao so na especificacao de nome canonico.
+_INMETRO_RE = re.compile(r"inmetro", re.IGNORECASE)
+# Da descricao so vale o TRECHO em volta da mencao: rodar o detector de numero
+# de registro na descricao inteira transformaria SAC, lote ou dimensao em "OK",
+# e um OK falso e o erro caro aqui (o time deixaria de olhar o item).
+_DESCRIPTION_CHARS_BEFORE = 80
+_DESCRIPTION_CHARS_AFTER = 200
+_MAX_EVIDENCE_CHARS = 600
 # Especificacoes que costumam trazer a contagem quando o nome nao traz.
 _PIECES_SPEC_NAMES = ("componentes", "número de peças", "numero de pecas", "quantidade de peças")
 
@@ -106,12 +115,39 @@ def _spec_values(product: dict) -> list[tuple[str, str]]:
     return out
 
 
+def _description_snippets(product: dict) -> list[str]:
+    """Trechos da descricao do produto em volta de cada mencao a "inmetro"."""
+    raw = product.get("description")
+    if not isinstance(raw, str) or not raw:
+        return []
+    text = strip_html(raw)
+    trechos: list[str] = []
+    fim_anterior = -1
+    for match in _INMETRO_RE.finditer(text):
+        if match.start() < fim_anterior:
+            continue  # mencao ja coberta pelo trecho anterior
+        inicio = max(0, match.start() - _DESCRIPTION_CHARS_BEFORE)
+        fim_anterior = min(len(text), match.end() + _DESCRIPTION_CHARS_AFTER)
+        trechos.append(text[inicio:fim_anterior].strip())
+    return trechos
+
+
 def extract_inmetro_text(product: dict) -> str:
-    """Texto da especificacao 'Certificacao Inmetro' do produto, se houver."""
+    """Evidencia de certificacao Inmetro publicada no site para o produto.
+
+    Junta, sem repetir: o valor de toda especificacao cujo nome ou valor cite
+    "inmetro" e os trechos da descricao em volta da mencao. Vazio significa
+    "nada preenchido em texto" — selo que so aparece em IMAGEM nao e
+    detectavel por esta leitura.
+    """
+    achados: list[str] = []
     for name, value in _spec_values(product):
-        if any(alias in name.lower().strip() for alias in _INMETRO_SPEC_NAMES) and value:
-            return value
-    return ""
+        value = value.strip()
+        if value and (_INMETRO_RE.search(name) or _INMETRO_RE.search(value)):
+            achados.append(value)
+    achados.extend(_description_snippets(product))
+    unicos = list(dict.fromkeys(a for a in achados if a))
+    return " | ".join(unicos)[:_MAX_EVIDENCE_CHARS]
 
 
 def extract_pieces(product: dict) -> int | None:
