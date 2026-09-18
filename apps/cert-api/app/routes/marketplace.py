@@ -11,7 +11,8 @@ from app.config import DATABASE_URL
 from app.db.postgres import db
 from app.services.marketplace_audit import (
     DEFAULT_CATEGORY_PATH,
-    DEFAULT_PIECES_THRESHOLD,
+    MarketplaceAuditError,
+    is_valid_category_path,
     run_audit,
 )
 from app.utils.logging import log
@@ -26,6 +27,17 @@ _running_audits: dict[str, dict] = {}
 
 _MAX_TRACKED_AUDITS = 20
 
+# K9 (single-flight): o estado e em memoria e a API roda em processo unico do
+# uvicorn, entao um lock de modulo basta para "checar e reservar" de forma
+# atomica. Dois cliques ou duas abas nao podem disparar leituras concorrentes
+# contra o site da loja. Se um dia houver mais de um worker, isto precisa virar
+# advisory lock no Postgres.
+_audit_lock = threading.Lock()
+# Pior caso de uma execucao: 20 paginas x (3 tentativas x 25s + 6s de backoff)
+# ~ 27 min. Depois de 1h um run ainda "running" e thread travada, e nao pode
+# bloquear a auditoria para sempre.
+_STALE_RUN_SECONDS = 3600
+
 
 def _remember(run_id: str, state: dict) -> None:
     """Guarda o estado do run e descarta os mais antigos (memoria limitada)."""
@@ -34,19 +46,41 @@ def _remember(run_id: str, state: dict) -> None:
         _running_audits.pop(next(iter(_running_audits)))
 
 
-def _run_audit_worker(run_id: str, category_path: str, threshold: int) -> None:
+def _active_run_id(now: float) -> str | None:
+    """Id da auditoria em andamento, ou None. Chamar com `_audit_lock` tomado.
+
+    Run "running" ha mais de `_STALE_RUN_SECONDS` e marcado como erro aqui.
+    """
+    for run_id, state in _running_audits.items():
+        if state.get("status") != "running":
+            continue
+        if now - float(state.get("started_at") or 0) > _STALE_RUN_SECONDS:
+            log.error(f"Marketplace audit {run_id} travada; liberando o single-flight")
+            state.update(status="error", error="StaleRun", finished_at=now)
+            continue
+        return run_id
+    return None
+
+
+def _run_audit_worker(run_id: str, category_path: str) -> None:
     state = _running_audits[run_id]
     try:
-        result = run_audit(category_path=category_path, threshold=threshold)
+        result = run_audit(category_path=category_path)
         state.update(
             status="completed",
             summary=result["summary"],
             total=result["total"],
             scanned=result["scanned"],
+            unverified=result.get("unverified", 0),
             # O run_id que vale para consultar os itens e o gerado pelo servico.
             result_run_id=result["run_id"],
         )
+    except MarketplaceAuditError as e:
+        # Mensagem escrita por nos (ex.: categoria vazia): pode ir para a tela.
+        log.error(f"Marketplace audit {run_id} failed: {type(e).__name__}")
+        state.update(status="error", error=type(e).__name__, message=str(e))
     except Exception as e:
+        # Excecao inesperada pode carregar URL/SQL: so o tipo sai daqui.
         log.error(f"Marketplace audit {run_id} failed: {type(e).__name__}")
         state.update(status="error", error=type(e).__name__)
     finally:
@@ -58,20 +92,45 @@ def _run_audit_worker(run_id: str, category_path: str, threshold: int) -> None:
 def start_marketplace_audit(
     request: Request,
     category: str = Query(DEFAULT_CATEGORY_PATH, max_length=200),
-    threshold: int = Query(DEFAULT_PIECES_THRESHOLD, ge=1, le=100000),
 ) -> dict:
     """Dispara a auditoria em segundo plano.
 
     Returns:
         `{'run_id': ..., 'status': 'running'}`.
+
+    Raises:
+        HTTPException: 400 quando `category` nao cabe na allow-list. O valor vem
+            do usuario e vira PATH da URL lida pelo servidor: sem isto,
+            `../../admin` ou `a?b=c` escolheriam outro endpoint do site.
+            409 quando ja ha uma auditoria em andamento (single-flight).
+            503 quando a thread de leitura nao pode ser criada.
     """
     import uuid
 
+    if not is_valid_category_path(category):
+        raise HTTPException(400, "Categoria invalida")
+
     run_id = str(uuid.uuid4())
-    _remember(run_id, {"status": "running", "started_at": time.time()})
-    threading.Thread(
-        target=_run_audit_worker, args=(run_id, category, threshold), daemon=True
-    ).start()
+    with _audit_lock:
+        now = time.time()
+        active = _active_run_id(now)
+        if active:
+            raise HTTPException(
+                409, "Já existe uma auditoria em andamento. Aguarde ela terminar."
+            )
+        _remember(run_id, {"status": "running", "started_at": now})
+    try:
+        threading.Thread(
+            target=_run_audit_worker, args=(run_id, category), daemon=True
+        ).start()
+    except Exception as e:
+        # Sem thread nao ha `finally` do worker: sem isto o run ficaria
+        # "running" e bloquearia o single-flight ate o corte de 1h.
+        log.error(f"Marketplace audit {run_id} nao iniciou: {type(e).__name__}")
+        _running_audits[run_id].update(
+            status="error", error=type(e).__name__, finished_at=time.time()
+        )
+        raise HTTPException(503, "Nao foi possivel iniciar a auditoria") from None
     return {"run_id": run_id, "status": "running"}
 
 
@@ -135,14 +194,25 @@ def list_marketplace_items(
             params + [limit],
         )
         items = []
-        checked_at = None
         for r in cur.fetchall():
             item = dict(r)
             item["id"] = str(item["id"])
             if item.get("checked_at") is not None and hasattr(item["checked_at"], "isoformat"):
                 item["checked_at"] = item["checked_at"].isoformat()
-            checked_at = checked_at or item.get("checked_at")
             items.append(item)
+
+        # K8: a data e da EXECUCAO, nao da pagina filtrada. Tirada dos itens
+        # devolvidos, um filtro sem resultado ("Conforme (0)") zerava a data e a
+        # tela mandava rodar uma auditoria que ja tinha rodado.
+        cur.execute(
+            "SELECT MAX(checked_at) AS checked_at FROM cert_marketplace_items "
+            "WHERE run_id = %s",
+            [target],
+        )
+        run_row = cur.fetchone()
+        checked_at = run_row.get("checked_at") if run_row else None
+        if checked_at is not None and hasattr(checked_at, "isoformat"):
+            checked_at = checked_at.isoformat()
 
         # O resumo cobre a execucao inteira, nao a pagina: com `verdict` no
         # filtro, contar os itens devolvidos daria sempre 100% do veredito

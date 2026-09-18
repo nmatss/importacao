@@ -8,13 +8,16 @@ import {
   fetchMarketplaceItems,
   startMarketplaceAudit,
   type CertMarketplaceItem,
+  type MarketplaceAuditState,
   type MarketplaceVerdict,
 } from '@/shared/lib/cert-api-client';
 
 /**
  * Auditoria dos quebra-cabeças vendidos por sellers terceiros na loja
- * Imaginarium (reunião 11/09/2026, item 6). Menos de 500 peças exige
- * certificação Inmetro informada no site.
+ * Imaginarium (reunião 11/09/2026, item 6): "trazer todos e dizer se está ok
+ * ou não". A situação reflete só a EVIDÊNCIA publicada no site. A regra de
+ * dispensa para 500 peças ou mais foi citada na reunião, mas NÃO aprovada: a
+ * tela não pode afirmá-la e a contagem de peças é apenas informativa.
  */
 
 const VERDICT_META: Record<
@@ -23,25 +26,25 @@ const VERDICT_META: Record<
 > = {
   NAO_OK: {
     label: 'Não conforme',
-    help: 'Exige certificação e o site não informa um registro válido',
+    help: 'O site não informa o certificado: nenhuma especificação ou descrição cita o Inmetro',
     cls: 'bg-danger-100 text-danger-700 dark:bg-danger-900/40 dark:text-danger-300',
     dot: 'bg-danger-500',
   },
   REVISAR: {
     label: 'Revisar',
-    help: 'Não foi possível concluir pelo site — precisa de conferência humana',
+    help: 'Informação incompleta (texto sem número de registro) ou declaração de dispensa feita pelo seller — conferir',
     cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
     dot: 'bg-amber-500',
   },
   OK: {
     label: 'Conforme',
-    help: 'Exige certificação e o site informa o número de registro',
+    help: 'O site informa o certificado com número de registro (autenticidade não verificada)',
     cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
     dot: 'bg-emerald-500',
   },
   NAO_EXIGE: {
     label: 'Não exige',
-    help: '500 peças ou mais, ou item que não é quebra-cabeça',
+    help: 'Veredito de execuções antigas. A auditoria atual nunca dispensa um item por conta própria',
     cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
     dot: 'bg-slate-400',
   },
@@ -50,7 +53,30 @@ const VERDICT_META: Record<
 // A ordem coloca primeiro o que precisa de ação.
 const VERDICT_ORDER: MarketplaceVerdict[] = ['NAO_OK', 'REVISAR', 'OK', 'NAO_EXIGE'];
 
+// Vereditos que a auditoria atribui hoje. "Não exige" só aparece como filtro se
+// uma execução antiga o tiver: um chip eterno em (0) sugeriria que a dispensa
+// por contagem de peças está em vigor.
+const ALWAYS_VISIBLE: ReadonlySet<MarketplaceVerdict> = new Set(['NAO_OK', 'REVISAR', 'OK']);
+
 const POLL_MS = 3000;
+
+/**
+ * Uma execução sem linha gravada não aparece na lista: a tela continuaria
+ * mostrando a auditoria anterior como "última". O aviso fica na página (o toast
+ * some) até a próxima execução.
+ */
+function auditNotice(state: MarketplaceAuditState): string | null {
+  if (state.status === 'error') {
+    return (
+      state.message ??
+      `A auditoria falhou (${state.error ?? 'erro desconhecido'}). Nada foi gravado: a lista abaixo continua sendo a da auditoria anterior.`
+    );
+  }
+  if ((state.total ?? 0) === 0) {
+    return `A auditoria leu ${state.scanned ?? 0} produto(s) e não encontrou item de seller terceiro com estoque. Nada foi gravado: a lista abaixo continua sendo a da auditoria anterior.`;
+  }
+  return null;
+}
 
 function VerdictBadge({ verdict }: { verdict: MarketplaceVerdict }) {
   const meta = VERDICT_META[verdict] ?? VERDICT_META.REVISAR;
@@ -76,6 +102,7 @@ export default function CertMarketplacePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [auditing, setAuditing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const pollTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -109,6 +136,7 @@ export default function CertMarketplacePage() {
 
   async function handleAudit() {
     setAuditing(true);
+    setNotice(null);
     try {
       const { run_id } = await startMarketplaceAudit();
       const poll = async () => {
@@ -119,12 +147,23 @@ export default function CertMarketplacePage() {
             return;
           }
           setAuditing(false);
+          const problem = auditNotice(state);
+          setNotice(problem);
           if (state.status === 'error') {
-            toast.error(`A auditoria falhou (${state.error ?? 'erro desconhecido'}).`);
-          } else {
-            toast.success('Auditoria concluída.');
-            await load();
+            toast.error(problem ?? 'A auditoria falhou.');
+            return;
           }
+          const unverified = state.unverified ?? 0;
+          if (problem) {
+            toast.warning(problem);
+          } else if (unverified > 0) {
+            toast.warning(
+              `Auditoria concluída, mas ${unverified} produto(s) vieram malformados do site e não puderam ser verificados.`,
+            );
+          } else {
+            toast.success(`Auditoria concluída: ${state.total ?? 0} item(ns) de seller terceiro.`);
+          }
+          await load();
         } catch (err) {
           setAuditing(false);
           toast.error(getErrorMessage(err));
@@ -150,8 +189,12 @@ export default function CertMarketplacePage() {
             Marketplace — quebra-cabeças
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Quebra-cabeças de sellers terceiros na loja Imaginarium. Abaixo de 500 peças, o site
-            precisa informar a certificação do Inmetro.
+            Quebra-cabeças de sellers terceiros na loja Imaginarium. A situação mostra se o site
+            informa o certificado do Inmetro de cada produto.
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            A quantidade de peças é apenas informativa: a regra de dispensa para 500 peças ou mais
+            aguarda aprovação do time fiscal e não é aplicada aqui.
           </p>
         </div>
         <button
@@ -168,6 +211,16 @@ export default function CertMarketplacePage() {
           {auditing ? 'Auditando…' : 'Rodar auditoria'}
         </button>
       </div>
+
+      {notice && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{notice}</span>
+        </div>
+      )}
 
       {loadError && (
         <div
@@ -200,7 +253,7 @@ export default function CertMarketplacePage() {
           >
             Todos ({total})
           </button>
-          {VERDICT_ORDER.map((v) => (
+          {VERDICT_ORDER.filter((v) => ALWAYS_VISIBLE.has(v) || (summary[v] ?? 0) > 0).map((v) => (
             <button
               key={v}
               type="button"
@@ -226,6 +279,11 @@ export default function CertMarketplacePage() {
               ? 'Auditoria registrada sem data de verificação.'
               : 'Nenhuma auditoria executada ainda.'}
         </p>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          A auditoria lê só o texto da página (especificações e descrição do produto). Selo ou
+          número que aparece apenas em imagem não é detectável e sai como “Não conforme”: abra o
+          produto antes de cobrar o seller.
+        </p>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-sm dark:border-slate-700/60 dark:bg-slate-800">
@@ -237,10 +295,12 @@ export default function CertMarketplacePage() {
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
             <AlertTriangle className="h-7 w-7 text-slate-300" />
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-              Nenhum item nesta seleção
+              {runId ? 'Nenhum item com esta situação na última auditoria' : 'Nenhum item auditado'}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Rode a auditoria para ler a categoria na loja.
+              {runId
+                ? 'A auditoria já rodou: escolha outra situação para ver os itens.'
+                : 'Rode a auditoria para ler a categoria na loja.'}
             </p>
           </div>
         ) : (
@@ -251,7 +311,10 @@ export default function CertMarketplacePage() {
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Produto
                   </th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th
+                    title="Informativo: a quantidade de peças não altera a situação"
+                    className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                  >
                     Peças
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
