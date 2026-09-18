@@ -586,7 +586,12 @@ export async function fetchCertExpired(params?: {
 
 // ---------- Certificates (cadastro + escrita no Linx) ----------
 
-export type LinxStatus = 'pending' | 'applied' | 'disabled' | 'error';
+/**
+ * `skipped`: o Linx está ligado e o produto existe, mas não havia data a gravar
+ * (certificado ATIVO não tem fim de venda). Não é erro nem pendência — e não é
+ * `applied`, que só vale quando ao menos uma propriedade foi gravada.
+ */
+export type LinxStatus = 'pending' | 'applied' | 'skipped' | 'disabled' | 'error';
 
 export type CertSituacao = 'ATIVO' | 'ENCERRADO';
 

@@ -244,7 +244,7 @@ async def test_create_happy_path_records_linx_outcome(
     # SKU/brand are trimmed before reaching Linx; record saved even with Linx off.
     # A VALIDADE nao sobe (decisao D11): a propriedade 00106/00224 e o fim de
     # venda, e aqui nao foi informado nenhum.
-    linx.assert_called_once_with("imaginarium", "SKU1", None, None, fim_venda=None)
+    linx.assert_called_once_with("imaginarium", "SKU1", None, None, fim_venda=None, situacao="ATIVO")
     assert len(list(tmp_path.glob("*.pdf"))) == 1
     executed_sql = " ".join(str(c.args[0]) for c in cur.execute.call_args_list)
     assert "INSERT INTO cert_certificates" in executed_sql
@@ -273,7 +273,9 @@ async def test_create_sends_only_fim_venda_to_linx(test_client, api_key_headers,
         headers=api_key_headers,
     )
     assert resp.status_code == 200
-    linx.assert_called_once_with("imaginarium", "PI5558Y", None, None, fim_venda="2026-10-29")
+    linx.assert_called_once_with(
+        "imaginarium", "PI5558Y", None, None, fim_venda="2026-10-29", situacao="ENCERRADO"
+    )
     assert "2028-07-27" not in [str(a) for a in linx.call_args.args]
 
 
@@ -420,7 +422,7 @@ async def test_retry_linx_reprocesses_saved_certificate(test_client, api_key_hea
         f"{CREATE_URL}/{_ROW['id']}/retry-linx", headers=api_key_headers
     )
     assert resp.status_code == 200
-    linx.assert_called_once_with("imaginarium", "SKU1", None, None, fim_venda=None)
+    linx.assert_called_once_with("imaginarium", "SKU1", None, None, fim_venda=None, situacao="ATIVO")
 
 
 @pytest.mark.asyncio
@@ -432,7 +434,7 @@ async def test_retry_linx_uses_fim_venda_when_present(test_client, api_key_heade
         f"{CREATE_URL}/{_ROW['id']}/retry-linx", headers=api_key_headers
     )
     assert resp.status_code == 200
-    linx.assert_called_once_with("imaginarium", "SKU1", None, None, fim_venda="2026-10-29")
+    linx.assert_called_once_with("imaginarium", "SKU1", None, None, fim_venda="2026-10-29", situacao="ENCERRADO")
 
 
 # ---------------------------------------------------------------------------
@@ -1408,3 +1410,74 @@ async def test_create_keeps_certificate_when_at_least_one_sku_links(test_client,
     assert response.status_code == 200
     assert response.json()["link_result"]["added"] == ["A"]
     assert not any(sql.startswith("DELETE FROM cert_certificates") for sql in _executed(cur))
+
+
+# ---------------------------------------------------------------------------
+# C5 — "skipped": Linx ligado, mas nada a gravar (certificado ATIVO)
+# ---------------------------------------------------------------------------
+
+_SKIPPED = {"status": "skipped", "produto_codigo": "P-1", "error": None,
+            "details": [{"field": "fim_venda", "prop": "00106", "action": "skipped (sem valor)"}]}
+
+
+@pytest.mark.asyncio
+async def test_create_active_certificate_is_recorded_as_skipped_not_applied(test_client, api_key_headers, mocker):
+    """Nada foi gravado no Linx: nem status "applied", nem linx_applied_at."""
+    cur, linx = _mock_certificates_env(mocker)
+    linx.return_value = dict(_SKIPPED)
+    response = await test_client.post(
+        CREATE_URL, headers=api_key_headers, data=_CREATE_CONTRACT["ativo"],
+    )
+    assert response.status_code == 200
+    # A guarda "certificado ativo nao grava" do linx_service so dispara se a rota disser a situacao.
+    assert linx.call_args.kwargs["situacao"] == "ATIVO"
+    item_insert = next(c for c in cur.execute.call_args_list if "INSERT INTO cert_certificate_items" in str(c.args[0]))
+    assert item_insert.args[1][4] == "skipped"
+    assert item_insert.args[1][7] is None  # linx_applied_at
+    update = next(c for c in cur.execute.call_args_list if "UPDATE cert_certificates" in str(c.args[0]))
+    assert update.args[1][1] == "skipped"
+    assert update.args[1][4] is None  # linx_applied_at
+    assert response.json()["link_result"]["linx"][0]["status"] == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_lot_summary_prefers_problem_over_skipped_and_applied_over_skipped(
+    test_client, api_key_headers, mocker
+):
+    """Status novo nao pode virar "desconhecido = pior caso" nem esconder um erro."""
+    cur, linx = _mock_certificates_env(mocker)
+    linx.side_effect = [
+        dict(_SKIPPED),
+        {"status": "applied", "produto_codigo": "B", "error": None, "details": []},
+    ]
+    response = await test_client.post(CREATE_URL, headers=api_key_headers, data={
+        "skus": "A\nB", "brand": "imaginarium", "validade_certificado": "2030-01-01", "situacao": "ATIVO",
+    })
+    assert response.status_code == 200
+    update = next(c for c in cur.execute.call_args_list if "UPDATE cert_certificates" in str(c.args[0]))
+    assert update.args[1][1] == "applied"
+
+    cur2, linx2 = _mock_certificates_env(mocker)
+    linx2.side_effect = [
+        dict(_SKIPPED),
+        {"status": "error", "produto_codigo": "B", "error": "Falha de escrita", "details": []},
+    ]
+    response = await test_client.post(CREATE_URL, headers=api_key_headers, data={
+        "skus": "A\nB", "brand": "imaginarium", "validade_certificado": "2030-01-01", "situacao": "ATIVO",
+    })
+    assert response.status_code == 200
+    update = next(c for c in cur2.execute.call_args_list if "UPDATE cert_certificates" in str(c.args[0]))
+    assert update.args[1][1] == "error"
+
+
+@pytest.mark.asyncio
+async def test_retry_reports_skipped_for_active_certificate(test_client, api_key_headers, mocker):
+    cur, linx = _mock_certificates_env(mocker, items=[_make_item("A")])
+    linx.return_value = dict(_SKIPPED)
+    response = await test_client.post(f"{CREATE_URL}/{_ROW['id']}/retry-linx", headers=api_key_headers)
+    assert response.status_code == 200
+    assert response.json()["retry_results"][0]["status"] == "skipped"
+    linx.assert_called_once_with("imaginarium", "A", None, None, fim_venda=None, situacao="ATIVO")
+    update = next(c for c in cur.execute.call_args_list if "UPDATE cert_certificates" in str(c.args[0]))
+    assert update.args[1][1] == "skipped"
+    assert update.args[1][4] is None

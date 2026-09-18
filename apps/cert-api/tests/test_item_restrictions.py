@@ -150,7 +150,7 @@ async def test_retry_uses_individual_restriction_and_keeps_unknown_deadline_pend
     response = await test_client.post(f"{CREATE_URL}/{_ROW['id']}/retry-linx", headers=api_key_headers)
     assert response.status_code == 200
     if expected_call:
-        linx.assert_called_once_with("imaginarium", "A", None, None, fim_venda=deadline)
+        linx.assert_called_once_with("imaginarium", "A", None, None, fim_venda=deadline, situacao="ENCERRADO")
     else:
         linx.assert_not_called()
         assert response.json()["retry_results"][0]["status"] == "pending"

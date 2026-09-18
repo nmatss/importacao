@@ -44,6 +44,13 @@ _CERTIFICATE_LINK_LOCK_KEY = 776_120_912
 
 _SITUACOES = ("ATIVO", "ENCERRADO")
 
+# Resumo de um lote: vence o status de MENOR numero, para que um problema nunca
+# seja escondido por um sucesso. "skipped" (Linx ligado, nada a gravar — item de
+# certificado ATIVO) nao e problema: fica depois de "applied", entao um lote
+# misto aparece como gravado e so um lote inteiro sem gravacao aparece como
+# "skipped". Status fora do mapa cai em 0 (pior caso) nos `.get(..., 0)`.
+_LINX_STATUS_PRIORITY = {"error": 0, "pending": 1, "disabled": 2, "applied": 3, "skipped": 4}
+
 
 def _bounded(value: str, label: str, max_length: int) -> str:
     """Trim and length-check a multipart text field."""
@@ -138,7 +145,9 @@ def _item_linx_result(brand: str, item: dict, certificate: dict) -> dict:
     if restriction["restricao_pendente"]:
         return {"status": "pending", "produto_codigo": item.get("produto_codigo"),
                 "error": "Restricao individual inconsistente ou sem fim de venda valido; confirmar antes do envio ao Linx", "details": []}
-    return _write_item_to_linx(brand, item["sku"], restriction["fim_venda_efetivo"], None)
+    return _write_item_to_linx(
+        brand, item["sku"], restriction["fim_venda_efetivo"], None, situacao=restriction["situacao_efetiva"]
+    )
 
 
 def _serialize_item(row: dict, certificate: dict | None = None) -> dict:
@@ -164,7 +173,9 @@ def _fetch_active_items(cur, cert_id: str, certificate: dict) -> list[dict]:
     return [_serialize_item(dict(r), certificate) for r in cur.fetchall()]
 
 
-def _write_item_to_linx(brand: str, sku: str, fim_venda: str | None, vencimento: str | None) -> dict:
+def _write_item_to_linx(
+    brand: str, sku: str, fim_venda: str | None, vencimento: str | None, situacao: str | None = None
+) -> dict:
     """Grava no Linx as datas de UM item do certificado.
 
     Decisao D11: a propriedade de certificacao (00106 Imaginarium / 00224 Puket)
@@ -175,9 +186,13 @@ def _write_item_to_linx(brand: str, sku: str, fim_venda: str | None, vencimento:
     `fim_venda`, nunca `validade_certificado`; certificado ativo sem fim de venda
     nao grava nada nessa propriedade (`write_certificate_to_linx` trata None como
     "skipped (sem valor)").
+
+    `situacao` (efetiva do item) vai junto para que a guarda "certificado ATIVO
+    nao grava" do linx_service dispare de verdade: sem ela a guarda dependia so
+    de o chamador ja ter zerado a data.
     """
     return write_certificate_to_linx(
-        brand, sku, None, None, fim_venda=fim_venda or None
+        brand, sku, None, None, fim_venda=fim_venda or None, situacao=situacao
     )
 
 
@@ -558,7 +573,7 @@ def create_certificate(
             "status": "pending", "produto_codigo": None,
             "error": "Lote incompleto: existem SKUs nao vinculados; consulte link_result", "details": [],
         })
-    prioridade = {"error": 0, "pending": 1, "disabled": 2, "applied": 3}
+    prioridade = _LINX_STATUS_PRIORITY
     linx = min(resultados_linx, key=lambda item: prioridade.get(item["status"], 0)) if resultados_linx else {
         "status": "pending", "produto_codigo": None,
         "error": "Nenhum SKU novo foi vinculado", "details": [],
@@ -972,7 +987,7 @@ def retry_linx(request: Request, cert_id: str) -> dict:
                                 "error_type": type(exc).__name__}, ensure_ascii=True))
         raise
     status = result.get("linx_status")
-    status = status if status in {"applied", "pending", "disabled", "error"} else "unknown"
+    status = status if status in _LINX_STATUS_PRIORITY else "unknown"
     log.info(json.dumps({**audit, "phase": "failed" if status == "error" else "finished",
                          "status": status}, ensure_ascii=True))
     return result
@@ -1027,7 +1042,7 @@ def _retry_linx_locked(request: Request, cert_id: str) -> dict:
             resultados.append({"sku": sku, **resultado})
 
         # Um item com erro nao pode ser escondido pelo sucesso do primeiro SKU.
-        priority = {"error": 0, "pending": 1, "disabled": 2, "applied": 3}
+        priority = _LINX_STATUS_PRIORITY
         linx = min(resultados, key=lambda item: priority.get(item["status"], 0))
         applied_at = datetime.now(UTC) if linx["status"] == "applied" else None
         cur.execute(

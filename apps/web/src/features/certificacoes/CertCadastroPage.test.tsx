@@ -645,6 +645,54 @@ describe('CertCadastroPage — situação do certificado (contrato com o cert-ap
   });
 });
 
+// ── C5: "skipped" = Linx ligado, mas nada a gravar (certificado ativo). Antes o
+// back devolvia "applied" e a tela dizia "Gravado no Linx" sem gravação alguma.
+describe('CertCadastroPage — status skipped do Linx', () => {
+  beforeEach(() => {
+    mockedFetchCertificates.mockReset();
+    mockedCreate.mockReset();
+  });
+
+  it('não diz "Gravado no Linx" nem oferece reenvio para certificado sem data a gravar', async () => {
+    mockedFetchCertificates.mockResolvedValue({
+      items: [certificate({ linx_status: 'skipped' })],
+      total: 1,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    render(<CertCadastroPage />);
+
+    const row = (await screen.findByText('PI5555Y')).closest('div') as HTMLElement;
+    expect(within(row).getByText('Nada a gravar no Linx')).toBeInTheDocument();
+    expect(within(row).queryByText('Gravado no Linx')).not.toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /Reenviar ao Linx/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Nada a gravar no Linx' })).toBeInTheDocument();
+  });
+
+  it('explica no resultado do cadastro que certificado ativo não trava venda', async () => {
+    const user = userEvent.setup();
+    mockedFetchCertificates.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    mockedCreate.mockResolvedValue(certificate({ linx_status: 'skipped' }));
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), 'PI5555Y');
+    await user.type(screen.getByLabelText('Validade do Certificado'), '2027-03-22');
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    expect(await screen.findByText(/Certificado salvo/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nenhuma data foi enviada ao Linx: certificado ativo não tem fim de venda/),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('createCertificate (cliente real) — multipart do contrato', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

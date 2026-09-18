@@ -49,6 +49,12 @@ const LINX_BADGE: Record<LinxStatus, { label: string; cls: string }> = {
     label: 'Gravado no Linx',
     cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   },
+  // Linx ligado, produto encontrado, nada a gravar (certificado ativo). Neutro:
+  // não é sucesso de gravação, nem pendência que peça ação.
+  skipped: {
+    label: 'Nada a gravar no Linx',
+    cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  },
   pending: {
     label: 'Pendente',
     cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
@@ -93,6 +99,7 @@ const PER_PAGE = 10;
 const LINX_STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Todos os status' },
   { value: 'applied', label: 'Gravado no Linx' },
+  { value: 'skipped', label: 'Nada a gravar no Linx' },
   { value: 'pending', label: 'Pendente' },
   { value: 'error', label: 'Erro no Linx' },
   { value: 'disabled', label: 'Não gravado (Linx off)' },
@@ -351,6 +358,8 @@ export default function CertCadastroPage() {
       if (result?.id === id) setResult(updated);
       if (updated.linx_status === 'applied') {
         toast.success('Gravado no Linx com sucesso');
+      } else if (updated.linx_status === 'skipped') {
+        toast.info('Nada a gravar no Linx: não há fim de venda para este certificado.');
       } else if (updated.linx_status === 'error') {
         toast.error(`Linx retornou erro: ${updated.linx_error || 'verifique o detalhe do item'}`);
       }
@@ -480,14 +489,18 @@ export default function CertCadastroPage() {
             'rounded-xl border p-4 text-sm',
             result.linx_status === 'applied'
               ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/20'
-              : result.linx_status === 'error'
-                ? 'border-danger-200 bg-danger-50 dark:border-danger-900/50 dark:bg-danger-900/20'
-                : 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20',
+              : result.linx_status === 'skipped'
+                ? 'border-sky-200 bg-sky-50 dark:border-sky-900/50 dark:bg-sky-900/20'
+                : result.linx_status === 'error'
+                  ? 'border-danger-200 bg-danger-50 dark:border-danger-900/50 dark:bg-danger-900/20'
+                  : 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20',
           )}
         >
           <div className="flex items-start gap-2">
             {result.linx_status === 'applied' ? (
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+            ) : result.linx_status === 'skipped' ? (
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300" />
             ) : (
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
             )}
@@ -498,6 +511,12 @@ export default function CertCadastroPage() {
               {result.produto_codigo && (
                 <p className="text-slate-600 dark:text-slate-300">
                   Produto no Linx: <code className="font-mono">{result.produto_codigo}</code>
+                </p>
+              )}
+              {result.linx_status === 'skipped' && (
+                <p className="text-slate-600 dark:text-slate-300">
+                  Nenhuma data foi enviada ao Linx: certificado ativo não tem fim de venda, então o
+                  produto segue liberado para venda.
                 </p>
               )}
               {result.linx_error && (
