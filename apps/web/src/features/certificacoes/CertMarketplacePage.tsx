@@ -14,8 +14,10 @@ import {
 
 /**
  * Auditoria dos quebra-cabeças vendidos por sellers terceiros na loja
- * Imaginarium (reunião 11/09/2026, item 6). Menos de 500 peças exige
- * certificação Inmetro informada no site.
+ * Imaginarium (reunião 11/09/2026, item 6): "trazer todos e dizer se está ok
+ * ou não". A situação reflete só a EVIDÊNCIA publicada no site. A regra de
+ * dispensa para 500 peças ou mais foi citada na reunião, mas NÃO aprovada: a
+ * tela não pode afirmá-la e a contagem de peças é apenas informativa.
  */
 
 const VERDICT_META: Record<
@@ -24,25 +26,25 @@ const VERDICT_META: Record<
 > = {
   NAO_OK: {
     label: 'Não conforme',
-    help: 'Exige certificação e o site não informa um registro válido',
+    help: 'O site não informa o certificado: nenhuma especificação ou descrição cita o Inmetro',
     cls: 'bg-danger-100 text-danger-700 dark:bg-danger-900/40 dark:text-danger-300',
     dot: 'bg-danger-500',
   },
   REVISAR: {
     label: 'Revisar',
-    help: 'Não foi possível concluir pelo site — precisa de conferência humana',
+    help: 'Informação incompleta (texto sem número de registro) ou declaração de dispensa feita pelo seller — conferir',
     cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
     dot: 'bg-amber-500',
   },
   OK: {
     label: 'Conforme',
-    help: 'Exige certificação e o site informa o número de registro',
+    help: 'O site informa o certificado com número de registro (autenticidade não verificada)',
     cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
     dot: 'bg-emerald-500',
   },
   NAO_EXIGE: {
     label: 'Não exige',
-    help: '500 peças ou mais, ou item que não é quebra-cabeça',
+    help: 'Veredito de execuções antigas. A auditoria atual nunca dispensa um item por conta própria',
     cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
     dot: 'bg-slate-400',
   },
@@ -50,6 +52,11 @@ const VERDICT_META: Record<
 
 // A ordem coloca primeiro o que precisa de ação.
 const VERDICT_ORDER: MarketplaceVerdict[] = ['NAO_OK', 'REVISAR', 'OK', 'NAO_EXIGE'];
+
+// Vereditos que a auditoria atribui hoje. "Não exige" só aparece como filtro se
+// uma execução antiga o tiver: um chip eterno em (0) sugeriria que a dispensa
+// por contagem de peças está em vigor.
+const ALWAYS_VISIBLE: ReadonlySet<MarketplaceVerdict> = new Set(['NAO_OK', 'REVISAR', 'OK']);
 
 const POLL_MS = 3000;
 
@@ -182,8 +189,12 @@ export default function CertMarketplacePage() {
             Marketplace — quebra-cabeças
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Quebra-cabeças de sellers terceiros na loja Imaginarium. Abaixo de 500 peças, o site
-            precisa informar a certificação do Inmetro.
+            Quebra-cabeças de sellers terceiros na loja Imaginarium. A situação mostra se o site
+            informa o certificado do Inmetro de cada produto.
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            A quantidade de peças é apenas informativa: a regra de dispensa para 500 peças ou mais
+            aguarda aprovação do time fiscal e não é aplicada aqui.
           </p>
         </div>
         <button
@@ -242,7 +253,7 @@ export default function CertMarketplacePage() {
           >
             Todos ({total})
           </button>
-          {VERDICT_ORDER.map((v) => (
+          {VERDICT_ORDER.filter((v) => ALWAYS_VISIBLE.has(v) || (summary[v] ?? 0) > 0).map((v) => (
             <button
               key={v}
               type="button"
@@ -267,6 +278,11 @@ export default function CertMarketplacePage() {
             : runId
               ? 'Auditoria registrada sem data de verificação.'
               : 'Nenhuma auditoria executada ainda.'}
+        </p>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          A auditoria lê só o texto da página (especificações e descrição do produto). Selo ou
+          número que aparece apenas em imagem não é detectável e sai como “Não conforme”: abra o
+          produto antes de cobrar o seller.
         </p>
       </div>
 
@@ -295,7 +311,10 @@ export default function CertMarketplacePage() {
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Produto
                   </th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th
+                    title="Informativo: a quantidade de peças não altera a situação"
+                    className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                  >
                     Peças
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">

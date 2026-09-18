@@ -262,4 +262,57 @@ describe('CertMarketplacePage', () => {
     expect(screen.getByRole('button', { name: /Rodar auditoria/ })).toBeEnabled();
     expect(mockedAudit).not.toHaveBeenCalled();
   });
+  // K2 — a regra de 500 peças foi citada na reunião, mas NÃO aprovada.
+  it('nao afirma a regra de 500 pecas como criterio em vigor', async () => {
+    render(<CertMarketplacePage />);
+    await waitFor(() => expect(screen.getByText('Puzzle 60 pecas Aventura')).toBeInTheDocument());
+
+    const pagina = document.body.textContent ?? '';
+    expect(pagina).not.toMatch(/Abaixo de 500 peças/i);
+    expect(pagina).not.toMatch(/precisa informar/i);
+    expect(pagina).toMatch(/aguarda aprovação do time fiscal/i);
+    expect(pagina).toMatch(/informativ/i);
+    // Limite da leitura: texto em imagem não é detectável.
+    expect(pagina).toMatch(/imagem/i);
+
+    const titulos = Array.from(document.querySelectorAll('[title]')).map(
+      (el) => el.getAttribute('title') ?? '',
+    );
+    expect(titulos.join(' | ')).not.toMatch(/500 peças ou mais/i);
+    expect(titulos.join(' | ')).not.toMatch(/não foi possível concluir/i);
+  });
+
+  it('explica cada situacao pelo que a auditoria realmente faz', async () => {
+    render(<CertMarketplacePage />);
+    await waitFor(() => expect(screen.getByText(/Não conforme \(2\)/)).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: /Conforme \(0\)/ })).toHaveAttribute(
+      'title',
+      expect.stringMatching(/site informa/i),
+    );
+    expect(screen.getByRole('button', { name: /Não conforme \(2\)/ })).toHaveAttribute(
+      'title',
+      expect.stringMatching(/site não informa/i),
+    );
+    expect(screen.getByRole('button', { name: /Revisar \(17\)/ })).toHaveAttribute(
+      'title',
+      expect.stringMatching(/incompleta.*dispensa/i),
+    );
+  });
+
+  it('so mostra o filtro "Nao exige" quando uma execucao antiga tem esse veredito', async () => {
+    mockedItems.mockResolvedValue({
+      items: [item()],
+      run_id: 'run-1',
+      checked_at: '2026-09-11T12:00:00+00:00',
+      summary: { NAO_OK: 2, OK: 1, REVISAR: 3 },
+    });
+
+    render(<CertMarketplacePage />);
+
+    await waitFor(() => expect(screen.getByText(/Não conforme \(2\)/)).toBeInTheDocument());
+    // A auditoria nunca atribui "Não exige": um filtro eterno em (0) sugeriria
+    // que a dispensa por contagem de peças existe.
+    expect(screen.queryByRole('button', { name: /Não exige/ })).not.toBeInTheDocument();
+  });
 });
