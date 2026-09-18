@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { MockAuthProvider, mockUser } from '@/test/mocks/auth';
@@ -76,6 +76,31 @@ describe('CertRelatoriosPage', () => {
       '/api/reports/export-stock?brand=puket_escolares',
       expect.stringMatching(/^relatorio_stock_/),
       { method: 'POST' },
+    );
+  });
+
+  it('marca Puket Escolares como legado sem mudar o valor enviado ao backend', async () => {
+    renderPage();
+    await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+
+    const select = screen.getByLabelText(/Filtrar marca/i);
+    const option = within(select).getByRole('option', { name: 'Puket Escolares (legado)' });
+    // A aba foi abandonada em 11/09, mas producao ainda tem linhas com a marca:
+    // a opcao continua existindo e o slug nao muda.
+    expect(option).toHaveValue('puket_escolares');
+    expect(
+      within(select).queryByRole('option', { name: 'Puket Escolares' }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(select, 'puket_escolares');
+    await userEvent.click(screen.getByText('Todos os Produtos'));
+
+    await waitFor(() =>
+      expect(downloadCertApiResource).toHaveBeenCalledWith(
+        '/api/reports/export?brand=puket_escolares',
+        expect.stringMatching(/^relatorio_all_/),
+        { method: 'POST' },
+      ),
     );
   });
 

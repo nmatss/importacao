@@ -77,7 +77,11 @@ const BRAND_OPTIONS = [
   { value: '', label: 'Todas as marcas' },
   { value: 'imaginarium', label: 'Imaginarium' },
   { value: 'puket', label: 'Puket' },
-  { value: 'puket_escolares', label: 'Puket Escolares' },
+  // A aba "Puket Escolares" foi abandonada em 11/09/2026 (itens migraram para
+  // "Puket"), mas producao ainda tem linhas com a marca legada. A opcao fica —
+  // sem ela essas linhas so sairiam em "Todas as marcas" — com o rotulo dizendo
+  // que e legado. O valor enviado ao backend NAO muda.
+  { value: 'puket_escolares', label: 'Puket Escolares (legado)' },
 ];
 
 function formatSize(bytes: number): string {
