@@ -128,6 +128,21 @@ it('filtra por status e marca a partir dos itens de products', async () => {
   expect(screen.getByText('010203001')).toBeInTheDocument();
 });
 
+it('rotula no filtro todo status que o validador grava, inclusive EXPIRED', async () => {
+  // `validate_single_product` devolve EXPIRED para prazo de venda vencido; o
+  // filtro mostrava o codigo cru enquanto o selo da linha dizia "Vencido".
+  mockReport({
+    ...REAL_REPORT,
+    products: [...REAL_PRODUCTS, { ...REAL_PRODUCTS[0], sku: '770001', status: 'EXPIRED' }],
+  });
+  renderDetail();
+  await screen.findByText('770001');
+
+  const select = screen.getByLabelText('Filtrar status');
+  expect(within(select).getByRole('option', { name: 'Vencido' })).toHaveValue('EXPIRED');
+  expect(within(select).queryByRole('option', { name: 'EXPIRED' })).not.toBeInTheDocument();
+});
+
 it('continua lendo relatorios legados que usam a chave results', async () => {
   mockReport({ summary: REAL_REPORT.summary, results: REAL_PRODUCTS.slice(0, 1) });
   renderDetail();

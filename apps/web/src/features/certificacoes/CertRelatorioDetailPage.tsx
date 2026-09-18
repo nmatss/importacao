@@ -136,6 +136,8 @@ export default function CertRelatorioDetailPage() {
     URL_NOT_FOUND: 'Não Encontrado',
     API_ERROR: 'Erro de API',
     NO_EXPECTED: 'Sem Certificação',
+    // `validate_single_product` grava EXPIRED; mesmo texto do CertStatusBadge.
+    EXPIRED: 'Vencido',
   };
   const statuses = [...new Set(results.map((r) => r.status))];
   const brands = [...new Set(results.map((r) => r.brand))];
