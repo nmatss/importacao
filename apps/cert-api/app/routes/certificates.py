@@ -213,6 +213,54 @@ def _save_pdf(file: UploadFile, cert_id: str) -> str:
     return stored
 
 
+def _sample(values: list[str], limit: int = 10) -> str:
+    """Primeiros `limit` valores para uma mensagem de erro que cabe na tela."""
+    shown = ", ".join(values[:limit])
+    return f"{shown} e mais {len(values) - limit}" if len(values) > limit else shown
+
+
+def _nothing_linked_detail(link_result: dict) -> str:
+    """Explica por que NENHUM SKU do pedido pode ser vinculado."""
+    parts = ["Certificado nao cadastrado: nenhum SKU pode ser vinculado."]
+    outros = link_result.get("linked_to_other_active_cert") or []
+    if outros:
+        parts.append(
+            "Em outro certificado ativo: "
+            + _sample([f"{i['sku']} ({i.get('numero_certificado') or 'sem numero'})" for i in outros])
+            + "."
+        )
+    if link_result.get("not_found_in_linx"):
+        parts.append("Nao encontrados no Linx: " + _sample(link_result["not_found_in_linx"]) + ".")
+    if link_result.get("invalid"):
+        parts.append(f"{len(link_result['invalid'])} SKU(s) invalido(s).")
+    return " ".join(parts)
+
+
+def _discard_empty_certificate(cert_id: str, pdf_filename: str | None) -> bool:
+    """Desfaz um certificado recem-criado que ficou SEM item nenhum.
+
+    O `NOT EXISTS` cobre inclusive item ja removido: a linha com historico nunca
+    e apagada por aqui (mesma regra do DELETE administrativo, FK RESTRICT).
+
+    Returns:
+        True quando a linha foi apagada (e o PDF, se havia, removido do disco).
+    """
+    try:
+        with db() as (conn, cur):
+            cur.execute(
+                "DELETE FROM cert_certificates WHERE id = %s AND NOT EXISTS "
+                "(SELECT 1 FROM cert_certificate_items WHERE certificate_id = %s)",
+                [cert_id, cert_id],
+            )
+            removed = cur.rowcount > 0
+    except Exception as exc:
+        log.error(f"Could not discard empty certificate {cert_id}: type={type(exc).__name__}")
+        return False
+    if removed and pdf_filename:
+        (CERTS_DIR / pdf_filename).unlink(missing_ok=True)
+    return removed
+
+
 def _other_active_certificates(cur, cert_id: str, brand: str, skus: list[str]) -> dict:
     brand_key = normalize_brand_filter(brand)
     aliases = ["puket", "puket escolares"] if brand_key in ("puket", "puket escolares") else [brand_key]
@@ -377,8 +425,14 @@ def create_certificate(
     Returns:
         The created certificate record (serialized) with `items` e `link_result`.
 
+    Um certificado nunca fica gravado SEM produto: o lock de vinculo e tomado
+    antes do INSERT e, se nenhum SKU do pedido pode ser vinculado, nada e
+    gravado (ou o registro recem-criado e desfeito).
+
     Raises:
-        HTTPException: 400 on invalid input, 500 if the database is unavailable.
+        HTTPException: 400 on invalid input or when no SKU can be linked, 409
+            when another linking operation holds the lock, 500 if the database
+            is unavailable.
     """
     if not DATABASE_URL:
         raise HTTPException(500, "Banco de dados nao configurado")
@@ -421,26 +475,6 @@ def create_certificate(
     effective_created_by = _actor(request, created_by)
 
     cert_id = str(uuid.uuid4())
-    pdf_filename = _save_pdf(pdf, cert_id) if pdf is not None and pdf.filename else None
-
-    with db() as (conn, cur):
-        cur.execute(
-            """
-            INSERT INTO cert_certificates
-                (id, sku, brand, validade_certificado, fim_venda, situacao,
-                 vencimento_licenciamento, numero_certificado, ocp,
-                 orgao_certificador, pdf_filename, linx_status, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
-            """,
-            [
-                cert_id, lista[0], brand,
-                validade_certificado or None, fim_venda or None, situacao,
-                vencimento_licenciamento or None,
-                numero_certificado or None, ocp or None, orgao_certificador or None,
-                pdf_filename, effective_created_by,
-            ],
-        )
-
     cert = {
         "id": cert_id,
         "brand": brand,
@@ -448,7 +482,53 @@ def create_certificate(
         "fim_venda": fim_venda or None,
         "vencimento_licenciamento": vencimento_licenciamento or None,
     }
-    link_result = _link_skus(cert, lista, effective_created_by, dry_run=False)
+
+    # O lock vem ANTES do INSERT: com ele depois, um lock ocupado devolvia 409
+    # com o certificado ja gravado — um orfao sem item que o operador recadastrava
+    # por cima (e batia no indice unico do numero).
+    with sheet_sync_lock(_CERTIFICATE_LINK_LOCK_KEY) as acquired:
+        if not acquired:
+            raise HTTPException(409, "Outro vinculo de certificacao esta em andamento; tente novamente")
+
+        # Previa com o que o banco ja sabe: se NENHUM SKU pode ser vinculado, nao
+        # ha por que gravar certificado, PDF ou qualquer coisa.
+        previa = _link_skus_locked(cert, lista, effective_created_by, dry_run=True)
+        if not previa["added"]:
+            raise HTTPException(400, _nothing_linked_detail(previa))
+
+        pdf_filename = _save_pdf(pdf, cert_id) if pdf is not None and pdf.filename else None
+        try:
+            with db() as (conn, cur):
+                cur.execute(
+                    """
+                    INSERT INTO cert_certificates
+                        (id, sku, brand, validade_certificado, fim_venda, situacao,
+                         vencimento_licenciamento, numero_certificado, ocp,
+                         orgao_certificador, pdf_filename, linx_status, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
+                    """,
+                    [
+                        cert_id, lista[0], brand,
+                        validade_certificado or None, fim_venda or None, situacao,
+                        vencimento_licenciamento or None,
+                        numero_certificado or None, ocp or None, orgao_certificador or None,
+                        pdf_filename, effective_created_by,
+                    ],
+                )
+            link_result = _link_skus_locked(cert, lista, effective_created_by, dry_run=False)
+        except Exception:
+            # Falha no meio do caminho: so desfaz se NENHUM item chegou a existir.
+            _discard_empty_certificate(cert_id, pdf_filename)
+            raise
+
+        # "Existe no Linx?" so o ERP responde, e so na gravacao. Se nenhum SKU
+        # passou, nada foi escrito no Linx e o certificado recem-criado e desfeito
+        # em vez de ficar sem produto.
+        if not link_result["added"]:
+            detail = _nothing_linked_detail(link_result)
+            if not _discard_empty_certificate(cert_id, pdf_filename):
+                detail += " O registro do certificado nao pode ser desfeito automaticamente; avise a TI."
+            raise HTTPException(400, detail)
 
     # Resultado do lote: erro de um SKU nao pode ser escondido pelo primeiro.
     resultados_linx = list(link_result["linx"])

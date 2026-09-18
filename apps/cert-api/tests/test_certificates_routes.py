@@ -1251,3 +1251,97 @@ async def test_sku_filter_does_not_resurrect_removed_legacy_association(test_cli
     query = next(call for call in cur.execute.call_args_list if "SELECT COUNT(*) AS cnt FROM cert_certificates" in call.args[0])
     assert "NOT EXISTS (SELECT 1 FROM cert_certificate_items legacy" in query.args[0]
     assert "ci.removed_at IS NULL" in query.args[0]
+
+
+# ---------------------------------------------------------------------------
+# C3 — certificado orfao: o cadastro nao pode deixar certificado sem item
+# ---------------------------------------------------------------------------
+
+_PDF = {"pdf": ("cert.pdf", b"%PDF-1.4 fake body", "application/pdf")}
+
+
+def _executed(cur) -> list[str]:
+    return [" ".join(str(c.args[0]).split()) for c in cur.execute.call_args_list]
+
+
+@pytest.mark.asyncio
+async def test_create_with_busy_lock_saves_nothing(test_client, api_key_headers, mocker, tmp_path):
+    """Lock ocupado: 409 ANTES do INSERT — antes o certificado ja estava gravado."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def occupied(*args):
+        yield False
+
+    cur, linx = _mock_certificates_env(mocker, tmp_path=tmp_path)
+    mocker.patch("app.routes.certificates.sheet_sync_lock", side_effect=occupied)
+    response = await test_client.post(
+        CREATE_URL,
+        headers=api_key_headers,
+        data={"sku": "A", "brand": "imaginarium", "validade_certificado": "2030-01-01"},
+        files=_PDF,
+    )
+    assert response.status_code == 409
+    assert not any("INSERT" in sql for sql in _executed(cur))
+    assert list(tmp_path.glob("*.pdf")) == []
+    linx.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_refuses_when_every_sku_belongs_to_another_active_certificate(
+    test_client, api_key_headers, mocker, tmp_path
+):
+    """Todos os SKUs rejeitados: erro claro e NENHUM certificado gravado (antes: 200 com zero itens)."""
+    cur, linx = _mock_certificates_env(mocker, tmp_path=tmp_path, other_cert_items={"PI6552Y": "8325/2022-BRI-1"})
+    response = await test_client.post(
+        CREATE_URL,
+        headers=api_key_headers,
+        data={"sku": "PI6552Y", "brand": "imaginarium", "validade_certificado": "2030-01-01"},
+        files=_PDF,
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "PI6552Y" in detail and "8325/2022-BRI-1" in detail
+    assert not any("INSERT" in sql for sql in _executed(cur))
+    assert list(tmp_path.glob("*.pdf")) == []
+    linx.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_discards_certificate_when_no_sku_exists_in_linx(
+    test_client, api_key_headers, mocker, tmp_path
+):
+    """So o Linx sabe se o SKU existe: se NENHUM existe, o certificado recem-gravado e desfeito."""
+    cur, linx = _mock_certificates_env(mocker, tmp_path=tmp_path)
+    linx.return_value = {
+        "status": "error", "produto_codigo": None,
+        "error": "SKU 'FANTASMA' nao encontrado no Linx", "details": [],
+    }
+    response = await test_client.post(
+        CREATE_URL,
+        headers=api_key_headers,
+        data={"sku": "FANTASMA", "brand": "imaginarium", "validade_certificado": "2030-01-01"},
+        files=_PDF,
+    )
+    assert response.status_code == 400
+    assert "FANTASMA" in response.json()["detail"]
+    executed = _executed(cur)
+    assert not any("INSERT INTO cert_certificate_items" in sql for sql in executed)
+    delete = next(sql for sql in executed if sql.startswith("DELETE FROM cert_certificates"))
+    # Nunca apaga certificado que ja tenha item (nem historico de item).
+    assert "NOT EXISTS (SELECT 1 FROM cert_certificate_items" in delete
+    assert list(tmp_path.glob("*.pdf")) == []
+
+
+@pytest.mark.asyncio
+async def test_create_keeps_certificate_when_at_least_one_sku_links(test_client, api_key_headers, mocker):
+    """Lote parcial continua valendo: o certificado fica, com o aviso de lote incompleto."""
+    cur, _ = _mock_certificates_env(mocker, other_cert_items={"PI6552Y": "8325/2022-BRI-1"})
+    response = await test_client.post(
+        CREATE_URL,
+        headers=api_key_headers,
+        data={"skus": "A\nPI6552Y", "brand": "imaginarium", "validade_certificado": "2030-01-01"},
+    )
+    assert response.status_code == 200
+    assert response.json()["link_result"]["added"] == ["A"]
+    assert not any(sql.startswith("DELETE FROM cert_certificates") for sql in _executed(cur))
