@@ -233,6 +233,22 @@ export function sheetsSyncPendencias(run: CertSyncRun | null): { total: number; 
 }
 
 /**
+ * A última execução leu o Linx? Licenciamento, grife e fim de vendas só existem
+ * no painel depois dessa leitura; sem ela, um filtro de licenciamento vazio NÃO
+ * significa "não há vencidos".
+ */
+export function linxWasRead(run: CertSyncRun | null): boolean {
+  const linx = run?.result?.linx;
+  if (!linx || typeof linx !== 'object') return false;
+  const { skipped, error, errors } = linx as {
+    skipped?: unknown;
+    error?: unknown;
+    errors?: unknown;
+  };
+  return !skipped && !error && !(Array.isArray(errors) && errors.length > 0);
+}
+
+/**
  * Quebra o "Nº Certificado" (coluna P das abas) em linhas.
  * Alguns produtos recertificados trazem DOIS números separados por quebra de
  * linha (ex.: '6916-2021-BRI-1\n MT-5493/2021'); exibi-los concatenados fazia
@@ -306,6 +322,11 @@ export default function CertProdutosPage() {
   const [lastSync, setLastSync] = useState<CertSyncRun | null>(null);
   const syncCause = sheetsSyncCause(lastSync);
   const syncPendencias = sheetsSyncPendencias(lastSync);
+  // Filtro de licenciamento por DATA (tudo menos "Pendente") sem o Linx lido.
+  const licenseFilterWithoutLinx =
+    Boolean(statusFilters.license_status) &&
+    statusFilters.license_status !== 'PENDENTE' &&
+    !linxWasRead(lastSync);
 
   const latestRequest = useRef(0);
 
@@ -406,6 +427,9 @@ export default function CertProdutosPage() {
       // Mensagem do backend preservada: 409 (já há um sync rodando) e 403 (sem
       // permissão) precisam chegar ao operador com o motivo real.
       toast.error(getErrorMessage(err));
+      // A execução que falhou também fica registrada: sem recarregar, o aviso
+      // da última sincronização continuaria mostrando a tentativa anterior.
+      await loadLastSync();
     } finally {
       setSyncing(false);
     }
@@ -543,6 +567,24 @@ export default function CertProdutosPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {lastSync?.error && (
+        <div
+          role="alert"
+          className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300"
+        >
+          <p className="font-semibold">
+            A última sincronização ({formatDateTime(lastSync.started_at)}) falhou — {lastSync.error}
+            .{syncCause ? ` Motivo: ${syncCause}.` : ''}
+          </p>
+          <p className="mt-1 text-xs">
+            Os produtos exibem os últimos dados salvos; esta tentativa não confirmou a atualização
+            das fontes.
+            {!linxWasRead(lastSync) &&
+              ' Licenciamento, grife e fim de vendas do Linx também não foram lidos.'}
+          </p>
+        </div>
+      )}
+
       {loadError && (
         <div
           role="alert"
@@ -772,9 +814,7 @@ export default function CertProdutosPage() {
               : ` (${SYNC_TRIGGER_LABEL[lastSync.trigger]})`}
             {lastSync.error && (
               <span className="ml-2 font-medium text-danger-600 dark:text-danger-300">
-                falhou — {lastSync.error}.{syncCause ? ` Motivo: ${syncCause}.` : ''} Os produtos
-                exibem os últimos dados salvos; esta tentativa não confirmou a atualização das
-                fontes.
+                falhou — veja o aviso no topo da página.
               </span>
             )}
             {!lastSync.error && syncPendencias.total > 0 && (
@@ -814,9 +854,26 @@ export default function CertProdutosPage() {
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
               Nenhum produto encontrado
             </p>
-            <p className="text-xs mt-1 text-slate-500 dark:text-slate-400">
-              Ajuste os filtros ou busca
-            </p>
+            {licenseFilterWithoutLinx ? (
+              <div className="mt-2 max-w-md text-center">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                  O licenciamento ainda não foi lido do Linx, então este resultado vazio não
+                  significa que não existam produtos nesse status. Até a leitura acontecer, todos
+                  aparecem como “Pendente”.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleStatusFilterChange('license_status', 'PENDENTE')}
+                  className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-50 dark:border-amber-700 dark:bg-slate-800 dark:text-amber-400"
+                >
+                  Ver licenciamento pendente
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs mt-1 text-slate-500 dark:text-slate-400">
+                Ajuste os filtros ou busca
+              </p>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

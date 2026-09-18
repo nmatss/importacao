@@ -29,6 +29,12 @@ SHEET_SYNC_LOCK_KEY = 776_120_911
 # Valores aceitos pelo CHECK de `cert_sync_runs.trigger` (ver db/postgres.py).
 SYNC_TRIGGERS = ("manual", "startup", "schedule", "hourly")
 
+# Resumo da execucao quando a planilha e recusada. O motivo acionavel (aba,
+# cabecalho, SKU) fica em `result.sheets.error`; aqui so se diz o que aconteceu
+# com cada etapa.
+_SHEETS_FAILED_LINX_OK = "Sincronizacao da planilha falhou; leitura do Linx concluida"
+_SHEETS_FAILED_LINX_FAILED = "Sincronizacao da planilha falhou; leitura do Linx tambem falhou ou ficou incompleta"
+
 
 @contextmanager
 def sheet_sync_lock(lock_key: int = SHEET_SYNC_LOCK_KEY) -> Generator[bool, None, None]:
@@ -175,22 +181,23 @@ def run_sheet_sync(trigger: str, actor: str | None = None) -> dict:
             finish_sync_run(run_id, None, f"{type(e).__name__}: {e}")
             raise
 
-        if result["sheets"].get("error"):
-            result["linx"] = {"skipped": True, "reason": "Falha na leitura da certificacao"}
-            result["status"] = "error"
-            result["error"] = "Sincronizacao da planilha falhou; etapa Linx nao executada"
-            finish_sync_run(run_id, {"sheets": result["sheets"], "linx": result["linx"]}, result["error"])
-            return result
-
+        # A leitura do Linx roda MESMO com a planilha em erro: ela so depende dos
+        # SKUs ja gravados em `cert_products`, e a planilha que falha nao grava
+        # nada (retorna antes ou faz rollback). Enquanto as duas etapas estavam
+        # amarradas (12 a 18/09/2026), seis dias de planilha recusada deixaram
+        # licenciamento, grife e fim de vendas sem NENHUMA leitura.
         try:
             result["linx"] = sync_linx_attributes()
         except Exception as e:
             log.warning(f"Linx attribute sync failed during {trigger} sync: {type(e).__name__}")
             result["linx"] = {"error": type(e).__name__}
 
-        failed = bool(result["sheets"].get("error") or result["linx"].get("error") or result["linx"].get("errors"))
-        result["status"] = "error" if failed else "completed"
-        if failed:
+        sheets_failed = bool(result["sheets"].get("error"))
+        linx_failed = bool(result["linx"].get("error") or result["linx"].get("errors"))
+        result["status"] = "error" if (sheets_failed or linx_failed) else "completed"
+        if sheets_failed:
+            result["error"] = _SHEETS_FAILED_LINX_FAILED if linx_failed else _SHEETS_FAILED_LINX_OK
+        elif linx_failed:
             result["error"] = "Atualizacao parcial: planilha aplicada, mas a leitura do Linx falhou ou ficou incompleta"
         finish_sync_run(run_id, {"sheets": result["sheets"], "linx": result["linx"]}, result.get("error"))
         return result
@@ -214,7 +221,7 @@ def snapshot_sync_warning() -> str | None:
         or result.get("linx", {}).get("errors")
     ):
         if result.get("sheets", {}).get("error"):
-            return "Ultima sincronizacao da planilha falhou; etapa Linx nao executada, atualidade nao confirmada"
+            return "Ultima sincronizacao da planilha falhou; dados de certificacao sao os do ultimo sync bom, atualidade nao confirmada"
         return "Ultima sincronizacao incompleta; pode haver dados atualizados parcialmente, atualidade conjunta nao confirmada"
     if not last.get("finished_at"):
         return "Sincronizacao ainda em andamento; dados podem estar atualizados parcialmente"

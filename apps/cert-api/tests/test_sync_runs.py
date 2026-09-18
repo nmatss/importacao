@@ -180,6 +180,37 @@ async def test_sync_sheets_endpoint_returns_409_when_locked(
 
 
 @pytest.mark.asyncio
+async def test_sync_sheets_endpoint_tells_the_operator_the_actionable_cause(
+    test_client, api_key_headers, mocker
+):
+    """O resumo da execucao sempre vencia o `or`, e o motivo real nunca chegava ao toast."""
+    from app.routes import certifications
+
+    mocker.patch.object(certifications, "SHEETS_CLIENT_EMAIL", "svc@example.invalid")
+    mocker.patch.object(certifications, "SHEETS_PRIVATE_KEY", "key")
+    mocker.patch.object(
+        certifications,
+        "run_sheet_sync",
+        return_value={
+            "locked": True,
+            "trigger": "manual",
+            "run_id": "r1",
+            "status": "error",
+            "error": "Sincronizacao da planilha falhou; leitura do Linx concluida",
+            "sheets": {"synced": 0, "error": "Esquema de Encerramentos invalido: status"},
+            "linx": {"updated": 674, "errors": []},
+        },
+    )
+
+    resp = await test_client.post("/api/sync-sheets", headers=api_key_headers)
+
+    assert resp.status_code == 502
+    detail = resp.json()["detail"]
+    assert "planilha falhou" in detail
+    assert "Motivo: Esquema de Encerramentos invalido: status" in detail
+
+
+@pytest.mark.asyncio
 async def test_last_sync_endpoint_without_db(test_client, api_key_headers):
     """Sem banco a rota devolve o formato vazio, nao 500."""
     resp = await test_client.get("/api/sync-sheets/last", headers=api_key_headers)

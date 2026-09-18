@@ -215,6 +215,32 @@ class TestReadAtivos:
         assert len(_read_ativos_from_sheets(ss)) == 1  # Imaginarium/Escolares faltando
 
 
+class TestEsquemaEstrito:
+    """Cabecalho ausente ou duplicado e problema da ABA: recusa tudo e diz qual conferir."""
+
+    def test_cabecalho_status_duplicado_nao_apaga_a_coluna_no_banco(self):
+        import pytest
+
+        headers = [*MARCA_HEADERS, "STATUS"]
+        ss = _FakeSpreadsheet({
+            "Imaginarium": [headers, [*_linha_marca("PI1Y", "F", "C-1", "Ativo"), ""]],
+            "Puket": [MARCA_HEADERS, _linha_marca("100400496", "F", "C-2", "Ativo")],
+        })
+        with pytest.raises(ValueError, match="aba Imaginarium.*'status'"):
+            _read_ativos_from_sheets(ss, strict=True)
+
+    def test_descricao_ecommerce_renomeada_e_recusada_no_modo_estrito(self):
+        import pytest
+
+        headers = ["Texto site" if h == "Descrição E-commerce" else h for h in MARCA_HEADERS]
+        ss = _FakeSpreadsheet({
+            "Imaginarium": [headers, _linha_marca("PI1Y", "F", "C-1", "Ativo")],
+            "Puket": [MARCA_HEADERS, _linha_marca("100400496", "F", "C-2", "Ativo")],
+        })
+        with pytest.raises(ValueError, match="cabecalho ausente ou duplicado"):
+            _read_ativos_from_sheets(ss, strict=True)
+
+
 class TestReadEncerramentos:
     def _linha(self, sku, prazo, status, marca="IMAGINARIUM", cert="12224/2025-AE-2"):
         row = [""] * len(ENCERRAMENTOS_HEADERS)
@@ -596,6 +622,68 @@ class TestSyncSheetsToDb:
         assert result["ativos"] == 3
         assert [p["sku"] for p in result["pendencias"]] == ["PI4368Y"]
         assert result["pendencias"][0]["certificados"] == ["6544/2021-BRI", "6788/2021-BRI"]
+
+    def test_ean_sem_traducao_nao_vira_produto_nem_libera_o_sku_real(self, mocker):
+        """Linx fora do ar: a limpeza apagaria o bloqueio do SKU verdadeiro (ex. 100400416)."""
+        from app.services import erp_service
+
+        cur = self._mock_db(mocker)
+        mocker.patch.object(erp_service, "_read_ativos_from_sheets", return_value=[])
+        mocker.patch.object(
+            erp_service, "_read_encerramentos_from_sheets",
+            return_value=[
+                {"sku": "7909692117610", "ean_nao_resolvido": True, "name": "N", "brand": "Puket",
+                 "numero_certificado": "C", "sale_deadline": "13/08/2023",
+                 "sale_deadline_date": "2023-08-13",
+                 "encerramento_status": "Vencido - Venda Bloqueada", "is_expired": True},
+                {"sku": "050402301", "name": "N", "brand": "Puket", "numero_certificado": "C",
+                 "sale_deadline": "07/12/2025", "sale_deadline_date": "2025-12-07",
+                 "encerramento_status": "Vencido - Venda Bloqueada", "is_expired": True},
+            ],
+        )
+
+        result = erp_service.sync_sheets_to_db()
+
+        assert "error" not in result
+        assert result["eans_nao_resolvidos"] == ["7909692117610"]
+        assert result["encerramentos"] == 1
+        assert result["encerramentos_limpos"] == 0
+        sqls = [c.args[0] for c in cur.execute.call_args_list]
+        assert not any("SET sale_deadline = NULL" in s for s in sqls)
+        params = [p for c in cur.execute.call_args_list if len(c.args) > 1 for p in c.args[1]]
+        assert "7909692117610" not in params
+
+    def test_falha_do_linx_marca_o_ean_em_vez_de_deixar_passar_calado(self, mocker):
+        from app.services import erp_service
+
+        mocker.patch("app.db.sqlserver.fetch_barcode_map", side_effect=TimeoutError("linx"))
+        itens = [{"sku": "7909692117610", "brand": "Puket"}, {"sku": "050402301", "brand": "Puket"}]
+
+        assert erp_service._resolve_ean_skus(itens) == 0
+        assert itens[0].get("ean_nao_resolvido") is True
+        assert "ean_nao_resolvido" not in itens[1]
+
+    def test_prazo_que_nao_e_data_nem_veredito_e_contado(self, mocker):
+        from app.services import erp_service
+
+        self._mock_db(mocker)
+        mocker.patch.object(erp_service, "_read_ativos_from_sheets", return_value=[])
+        base = {"name": "N", "brand": "Puket", "numero_certificado": "C", "is_expired": False}
+        mocker.patch.object(
+            erp_service, "_read_encerramentos_from_sheets",
+            return_value=[
+                {**base, "sku": "A1", "sale_deadline": "out/26", "sale_deadline_date": None,
+                 "encerramento_status": ""},
+                {**base, "sku": "A2", "sale_deadline": "29/10/2026", "sale_deadline_date": "2026-10-29",
+                 "encerramento_status": "Comerciação Permitida"},
+                {**base, "sku": "A3", "sale_deadline": "out/26", "sale_deadline_date": None,
+                 "encerramento_status": "Vencido - Venda Bloqueada"},
+            ],
+        )
+
+        result = erp_service.sync_sheets_to_db()
+
+        assert result["prazos_ilegiveis"] == ["A1"]
 
     def test_grava_a_validade_do_certificado(self, mocker):
         from app.services import erp_service

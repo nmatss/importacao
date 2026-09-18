@@ -274,7 +274,13 @@ def _resolve_ean_skus(items: list[dict]) -> int:
         try:
             mapa = fetch_barcode_map(brand, sorted(codes))
         except Exception as e:
-            log.warning(f"Nao foi possivel resolver EAN->SKU da marca '{brand}': {e}")
+            log.warning(f"Nao foi possivel resolver EAN->SKU da marca '{brand}': {type(e).__name__}")
+            # Linx fora do ar: o codigo cru NAO e um SKU e o SKU verdadeiro e
+            # desconhecido nesta rodada. Quem consome precisa saber — ver
+            # `sync_sheets_to_db`, que nao grava a linha nem roda a limpeza.
+            for it in items:
+                if it.get("brand") == brand and it.get("sku", "").strip() in codes:
+                    it["ean_nao_resolvido"] = True
             continue
         for it in items:
             sku = it.get("sku", "").strip()
@@ -382,8 +388,20 @@ def _read_ativos_from_sheets(
             continue
 
         cols = _resolve_columns(rows[0], cfg["fields"], cfg["name"])
-        if strict and any(cols.get(field) is None for field in ("sku", "numero_certificado", "situacao", "validade_certificado")):
-            raise ValueError(f"Esquema de certificacao incompleto na aba {cfg['name']}")
+        # TODOS os campos do layout, nao so os quatro de identidade: o upsert
+        # atribui direto (sem COALESCE), entao uma coluna nao localizada — cabecalho
+        # renomeado ou DUPLICADO — gravaria '' na marca inteira. Um segundo
+        # "STATUS" na aba apagaria `sheet_status` e o "SKU excluido" voltaria a
+        # aparecer como vendavel. Problema de esquema e da aba, nao de um SKU:
+        # aqui recusar tudo e o correto, e a mensagem diz qual cabecalho conferir.
+        if strict:
+            faltando = sorted(field for field in cfg["fields"] if cols.get(field) is None)
+            if faltando:
+                rotulos = ", ".join(f"'{cfg['fields'][f][0][0]}'" for f in faltando)
+                raise ValueError(
+                    f"Esquema de certificacao incompleto na aba {cfg['name']}: "
+                    f"cabecalho ausente ou duplicado: {rotulos}"
+                )
         if strict and not any(_cell(row, cols["sku"]) for row in rows[1:]):
             raise ValueError(f"Aba {cfg['name']} com cabecalho mas sem dados; confirmar carga vazia")
         i_sku = cols["sku"]
@@ -762,6 +780,25 @@ def sync_sheets_to_db() -> dict:
         )
     except ValueError as exc:
         return {"synced": 0, "error": str(exc)}
+    # EAN que o Linx nao pode traduzir NESTA rodada (Linx fora do ar): o codigo
+    # cru viraria produto fantasma e, pior, o SKU verdadeiro ficaria fora de
+    # `skus_enc` — a limpeza abaixo apagaria prazo e `is_expired` de um item de
+    # venda BLOQUEADA. A linha nao e gravada e a limpeza nao roda; o proximo sync
+    # com o Linx no ar resolve.
+    eans_pendentes = [e["sku"] for e in encerramentos_lidos if e.get("ean_nao_resolvido")]
+    if eans_pendentes:
+        encerramentos_lidos = [e for e in encerramentos_lidos if not e.get("ean_nao_resolvido")]
+    # Texto na coluna de prazo que nao e data nem veredito conhecido vira "sem
+    # prazo" calado. `get_all_values` entrega o valor FORMATADO: trocar o formato
+    # da coluna na planilha (ex. "out/26") zeraria todas as travas sem erro.
+    prazos_ilegiveis = [
+        e["sku"]
+        for e in encerramentos_lidos
+        if e.get("sale_deadline")
+        and not e.get("sale_deadline_date")
+        and derive_venda_encerramento(e["sale_deadline"]) is None
+        and derive_venda_encerramento(e.get("encerramento_status")) is None
+    ]
     # Encerramento de certificado ANTIGO nao pode travar SKU com certificado
     # ativo (dupla certificacao) — ver `resolver_encerramentos`. Esse caso esta
     # DECIDIDO (reuniao 11/09, "vale o ativo") e nao e pendencia. Pendencia e o
@@ -820,7 +857,13 @@ def sync_sheets_to_db() -> dict:
             # sumiu / erro de leitura", e nesse segundo caso um DELETE-por-ausencia
             # apagaria o prazo e o vencimento de TODOS os produtos por causa de uma
             # falha transitoria do Sheets. Sem linhas, nao se conclui nada.
-            if encerramentos_lidos:
+            if eans_pendentes:
+                limpos = 0
+                log.warning(
+                    f"{len(eans_pendentes)} EAN(s) sem traducao (Linx indisponivel); "
+                    "linhas nao gravadas e limpeza de prazos adiada para o proximo sync"
+                )
+            elif encerramentos_lidos:
                 skus_enc = [e["sku"] for e in encerramentos]
                 cur.execute(_CLEAR_ENCERRAMENTOS_SQL, [skus_enc])
                 limpos = cur.rowcount
@@ -861,6 +904,8 @@ def sync_sheets_to_db() -> dict:
             "skus_dupla_certificacao": len({h["sku"] for h in historicos}),
             "pendencias_total": len(pendencias),
             "pendencias": pendencias[:_MAX_PENDENCIAS_NO_RESULTADO],
+            "eans_nao_resolvidos": eans_pendentes[:_MAX_PENDENCIAS_NO_RESULTADO],
+            "prazos_ilegiveis": prazos_ilegiveis[:_MAX_PENDENCIAS_NO_RESULTADO],
         }
     except Exception as e:
         log.error(f"Failed to sync sheets to DB: {e}")

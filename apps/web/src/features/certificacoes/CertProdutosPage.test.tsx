@@ -601,6 +601,89 @@ describe('CertProdutosPage — numero do certificado, grife e sync', () => {
     expect(screen.queryByText(/falhou/)).not.toBeInTheDocument();
   });
 
+  it('a falha da sincronizacao e um alerta de verdade, no topo', async () => {
+    mockedLastSync.mockResolvedValue({
+      last_run: {
+        id: 'r1',
+        trigger: 'hourly',
+        actor: null,
+        started_at: '2026-09-18T10:20:00+00:00',
+        finished_at: '2026-09-18T10:20:10+00:00',
+        result: {
+          sheets: { synced: 0, error: 'Aba Puket sem cabecalho' },
+          linx: { skipped: true },
+        },
+        error: 'Sincronizacao da planilha falhou',
+      },
+    });
+    renderPage();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Motivo: Aba Puket sem cabecalho.');
+    expect(alert).toHaveTextContent('do Linx também não foram lidos');
+  });
+
+  it('filtro de licenciamento vazio sem o Linx lido nao se passa por "nao ha vencidos"', async () => {
+    // Tela da Lilian em 17/09/2026: Encerrado + Vencido = 0, com o Linx nunca lido.
+    mockedFetch.mockResolvedValue({ products: [], total: 0 });
+    mockedLastSync.mockResolvedValue({
+      last_run: {
+        id: 'r1',
+        trigger: 'hourly',
+        actor: null,
+        started_at: '2026-09-18T10:20:00+00:00',
+        finished_at: '2026-09-18T10:20:10+00:00',
+        result: { sheets: { synced: 0, error: 'x' }, linx: { skipped: true } },
+        error: 'Sincronizacao da planilha falhou',
+      },
+    });
+    renderPage();
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vencido' }));
+
+    expect(await screen.findByText(/licenciamento ainda não foi lido do Linx/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver licenciamento pendente' }));
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({ license_status: 'PENDENTE' }),
+      ),
+    );
+  });
+
+  it('com o Linx lido, o vazio do filtro de licenciamento e so um vazio', async () => {
+    mockedFetch.mockResolvedValue({ products: [], total: 0 });
+    mockedLastSync.mockResolvedValue({
+      last_run: {
+        id: 'r1',
+        trigger: 'hourly',
+        actor: null,
+        started_at: '2026-09-18T10:20:00+00:00',
+        finished_at: '2026-09-18T10:20:10+00:00',
+        result: { sheets: { synced: 947 }, linx: { updated: 674, errors: [] } },
+        error: null,
+      },
+    });
+    renderPage();
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vencido' }));
+
+    expect(await screen.findByText('Ajuste os filtros ou busca')).toBeInTheDocument();
+    expect(screen.queryByText(/ainda não foi lido do Linx/)).not.toBeInTheDocument();
+  });
+
+  it('falha no botao de sincronizar recarrega a ultima execucao', async () => {
+    mockedFetch.mockResolvedValue({ products: [], total: 0 });
+    mockedSync.mockRejectedValue(new Error('Sincronizacao da planilha falhou. Motivo: x'));
+    renderPage();
+    await waitFor(() => expect(mockedLastSync).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /Sincronizar planilha agora/ }));
+
+    await waitFor(() => expect(mockedLastSync).toHaveBeenCalledTimes(2));
+  });
+
   it('nao esconde a lista quando a ultima sincronizacao falha ao carregar', async () => {
     mockedLastSync.mockRejectedValue(new Error('Erro na API: 503'));
     renderPage();

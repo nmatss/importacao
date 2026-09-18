@@ -173,19 +173,37 @@ def test_current_individual_exclusion_is_not_overridden_by_future_license():
     assert result["status_venda"] == "BLOQUEADA"
 
 
-def test_linx_sync_is_not_run_after_sheets_error(mocker):
+def test_linx_is_still_read_after_sheets_error(mocker):
+    """De 12 a 18/09/2026 a planilha recusada pulou o Linx 145 vezes: licenciamento nunca carregou."""
     from app.services import sync_runs
 
     mocker.patch.object(sync_runs, "DATABASE_URL", "")
     mocker.patch.object(sync_runs, "start_sync_run", return_value="run-1")
     finish = mocker.patch.object(sync_runs, "finish_sync_run")
     mocker.patch("app.services.erp_service.sync_sheets_to_db", return_value={"synced": 0, "error": "Esquema invalido"})
-    linx = mocker.patch("app.services.linx_attributes.sync_linx_attributes")
+    linx = mocker.patch("app.services.linx_attributes.sync_linx_attributes", return_value={"updated": 674, "errors": []})
     result = sync_runs.run_sheet_sync("manual")
-    linx.assert_not_called()
-    assert result["linx"]["skipped"] is True
+    linx.assert_called_once()
+    assert result["linx"] == {"updated": 674, "errors": []}
+    # A execucao continua sendo erro: a planilha nao foi aplicada.
     assert result["status"] == "error"
+    assert "planilha falhou" in result["error"] and "Linx concluida" in result["error"]
+    assert finish.call_args.args[1]["sheets"]["error"] == "Esquema invalido"
     assert finish.call_args.args[2] == result["error"]
+
+
+def test_sheets_and_linx_failing_together_are_both_reported(mocker):
+    from app.services import sync_runs
+
+    mocker.patch.object(sync_runs, "DATABASE_URL", "")
+    mocker.patch.object(sync_runs, "start_sync_run", return_value="run-1")
+    mocker.patch.object(sync_runs, "finish_sync_run")
+    mocker.patch("app.services.erp_service.sync_sheets_to_db", return_value={"synced": 0, "error": "Esquema invalido"})
+    mocker.patch("app.services.linx_attributes.sync_linx_attributes", side_effect=TimeoutError("linx"))
+    result = sync_runs.run_sheet_sync("hourly")
+    assert result["status"] == "error"
+    assert result["linx"] == {"error": "TimeoutError"}
+    assert "Linx tambem falhou" in result["error"]
 
 
 @pytest.mark.parametrize("rows,reason", [([], "sem cabecalho"), ([MARCA_HEADERS], "sem dados")])

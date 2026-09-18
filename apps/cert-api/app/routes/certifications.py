@@ -332,8 +332,12 @@ def trigger_sync_sheets(request: Request) -> dict:
     result = run_sheet_sync("manual", actor)
     if not result.get("locked"):
         raise HTTPException(409, "Ja existe uma sincronizacao da planilha em andamento")
-    if result.get("error") or result.get("sheets", {}).get("error"):
-        raise HTTPException(502, result.get("error") or result["sheets"]["error"])
+    sheets_error = result.get("sheets", {}).get("error")
+    if result.get("error") or sheets_error:
+        # O resumo da execucao sozinho nao diz o que corrigir; o motivo acionavel
+        # (aba, cabecalho, SKU) e o da planilha e tem de chegar ao operador.
+        resumo = result.get("error") or "Sincronizacao da planilha falhou"
+        raise HTTPException(502, f"{resumo}. Motivo: {sheets_error}" if sheets_error else resumo)
     return result
 
 
