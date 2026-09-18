@@ -28,6 +28,13 @@ from app.services.erp_service import (
 from app.services.erp_service import (
     safe_license_map as _safe_license_map,
 )
+from app.services.product_filters import (
+    matches_derived_filters as _matches_derived_filters,
+)
+from app.services.product_filters import (
+    parse_csv_filter as _parse_csv_filter,
+)
+from app.services.product_filters import product_filter_sql
 from app.services.sync_runs import fetch_last_sync_run, run_sheet_sync
 from app.services.wms_service import summarize_stock_rows, sync_stock_all
 from app.utils.logging import log
@@ -84,39 +91,6 @@ def _serialize_product(r: dict, license_map: dict | None = None) -> dict:
     r.pop("encerramento_numero_certificado", None)
     return r
 
-
-def _parse_csv_filter(raw: str) -> set[str]:
-    """Parse a comma-separated, case-insensitive filter value into a set.
-
-    Empty / blank input means "no constraint" (returns an empty set).
-    """
-    return {part.strip().lower() for part in (raw or "").split(",") if part.strip()}
-
-
-def _matches_derived_filters(
-    product: dict,
-    cert_statuses: set[str],
-    site_statuses: set[str],
-    license_statuses: set[str],
-    comercializacao_statuses: set[str] | None = None,
-) -> bool:
-    """Return True when a serialized product matches all requested derived axes.
-
-    Filtering is case-insensitive, AND across axes; an empty axis imposes no
-    constraint. The derived fields (cert_status/site_status/license_status/
-    comercializacao_status) come from `compute_status_dimensions`, so this must
-    run AFTER serialization.
-    """
-    if cert_statuses and str(product.get("cert_status") or "").strip().lower() not in cert_statuses:
-        return False
-    if site_statuses and str(product.get("site_status") or "").strip().lower() not in site_statuses:
-        return False
-    if license_statuses and str(product.get("license_status") or "").strip().lower() not in license_statuses:
-        return False
-    return not (
-        comercializacao_statuses
-        and str(product.get("comercializacao_status") or "").strip().lower() not in comercializacao_statuses
-    )
 
 
 def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, source: str | None = None) -> None:
@@ -522,6 +496,8 @@ def list_products(
     status: str = Query(""),
     start_date: str = Query(""),
     end_date: str = Query(""),
+    license_start_date: str = Query(""),
+    license_end_date: str = Query(""),
     cert_status: str = Query(""),
     site_status: str = Query(""),
     license_status: str = Query(""),
@@ -536,6 +512,10 @@ def list_products(
     case-insensitive list; filtering is AND across axes, and an empty axis
     imposes no constraint.
 
+    `license_start_date` / `license_end_date` form an inclusive ISO date
+    interval on real Linx license dates (year >= 2000). They are independent
+    from `start_date` / `end_date`, which filter the validation timestamp.
+
     `comercializacao_status` era montado e enviado pelo cliente do frontend sem
     estar declarado aqui — o FastAPI descarta query param nao declarado sem erro,
     entregando um filtro que nao filtra e nunca acusa. Agora e um eixo derivado
@@ -545,6 +525,15 @@ def list_products(
         Paginated dict with products (enriched with stock), total, page, per_page,
         total_pages, last_validation_date.
     """
+    try:
+        where, params = product_filter_sql(
+            search=search, brand=brand, grife=grife, status=status,
+            start_date=start_date, end_date=end_date,
+            license_start_date=license_start_date, license_end_date=license_end_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
     if not DATABASE_URL:
         return {
             "products": [],
@@ -562,46 +551,6 @@ def list_products(
     derived_filtering = bool(cert_statuses or site_statuses or license_statuses or comercializacao_statuses)
 
     with db() as (conn, cur):
-        conditions = []
-        params: list = []
-
-        if search:
-            conditions.append(_SEARCH_SQL)
-            params.extend([f"%{search}%"] * 3)
-        if brand:
-            # Mesma normalizacao do relatorio: a UI manda o slug
-            # `puket_escolares` e o banco guarda `Puket Escolares`.
-            conditions.append("LOWER(REPLACE(brand, '_', ' ')) = %s")
-            params.append(normalize_brand_filter(brand))
-        if grife:
-            # Grife/licenca vinda do Linx (PRODUTOS.GRIFFE na Puket,
-            # IMG_LICENCIAMENTO na Imaginarium). Comparacao exata e
-            # case-insensitive: os valores sao os que `/api/grifes` lista.
-            conditions.append("LOWER(COALESCE(grife, '')) = LOWER(%s)")
-            params.append(grife.strip())
-        if status:
-            statuses = [s.strip() for s in status.split(",") if s.strip()]
-            if "EXPIRED" in statuses:
-                statuses.remove("EXPIRED")
-                if statuses:
-                    conditions.append(
-                        "(last_validation_status IN ({}) OR is_expired = TRUE)".format(",".join(["%s"] * len(statuses)))
-                    )
-                    params.extend(statuses)
-                else:
-                    conditions.append("is_expired = TRUE")
-            elif statuses:
-                conditions.append("last_validation_status IN ({})".format(",".join(["%s"] * len(statuses))))
-                params.extend(statuses)
-
-        if start_date:
-            conditions.append("last_validation_date >= %s::date")
-            params.append(start_date)
-        if end_date:
-            conditions.append("last_validation_date < (%s::date + interval '1 day')")
-            params.append(end_date)
-
-        where = "WHERE " + " AND ".join(conditions) if conditions else ""
         license_map = _safe_license_map()
         offset = (page - 1) * per_page
 

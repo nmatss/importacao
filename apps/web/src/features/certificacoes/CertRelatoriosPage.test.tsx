@@ -23,6 +23,7 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
 import { toast } from 'sonner';
 import {
   certApiFetch,
+  upcomingLicenseFilters,
   downloadCertApiResource,
   fetchCertProducts,
   fetchCertReports,
@@ -48,6 +49,23 @@ describe('CertRelatoriosPage', () => {
     vi.mocked(certApiFetch).mockResolvedValue({
       json: vi.fn().mockResolvedValue({ wms: 1, ecommerce_puket: 2, ecommerce_imaginarium: 3 }),
     } as unknown as Response);
+  });
+
+  it.each([
+    ['Licenciamentos vencidos', { license_status: 'VENCIDO' }],
+    ['Licenciamentos a vencer em 30 dias', upcomingLicenseFilters()],
+  ])('exporta %s com os mesmos filtros da contagem', async (label, filters) => {
+    renderPage();
+    await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+    await userEvent.selectOptions(screen.getByLabelText(/Filtrar marca/i), 'puket');
+    await userEvent.click(screen.getByText(label));
+    await waitFor(() => expect(downloadCertApiResource).toHaveBeenCalled());
+    expect(fetchCertProducts).toHaveBeenCalledWith({ ...filters, brand: 'puket', per_page: 1 });
+    const [url] = vi.mocked(downloadCertApiResource).mock.calls[0];
+    expect(Object.fromEntries(new URL(url, 'https://example.invalid').searchParams)).toEqual({
+      ...filters,
+      brand: 'puket',
+    });
   });
 
   it('does not offer JSON-only actions for generated XLSX reports', async () => {
@@ -142,7 +160,7 @@ describe('CertRelatoriosPage', () => {
       );
       // O download nao e bloqueado: o backend ja entrega o arquivo.
       expect(downloadCertApiResource).toHaveBeenCalledWith(
-        '/api/reports/export?status=EXPIRED&brand=imaginarium',
+        '/api/reports/export?brand=imaginarium&status=EXPIRED',
         expect.stringMatching(/^relatorio_expired_/),
         { method: 'POST' },
       );

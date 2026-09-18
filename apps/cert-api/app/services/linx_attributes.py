@@ -48,7 +48,7 @@ def grife_column_for(brand: str) -> str:
     return _GRIFE_COLUMN_BY_BRAND.get(key, _DEFAULT_GRIFE_COLUMN)
 
 
-def parse_linx_date(value: object) -> date | None:
+def parse_linx_date(value: object, *, strict: bool = False) -> date | None:
     """Converte um valor de data do Linx em `date`, tratando a sentinela.
 
     O ERP representa "sem data" com 01/01/1900 e o default da propriedade e
@@ -59,6 +59,8 @@ def parse_linx_date(value: object) -> date | None:
 
     Returns:
         A data, ou None para vazio, sentinela ou texto nao reconhecido.
+        Com strict=True, texto nao reconhecido gera ValueError para preservar
+        o snapshot anterior em vez de transformar erro de origem em ausencia.
     """
     if value is None:
         return None
@@ -78,6 +80,8 @@ def parse_linx_date(value: object) -> date | None:
             except ValueError:
                 continue
         if parsed is None:
+            if strict:
+                raise ValueError("Data de propriedade Linx invalida")
             return None
     return None if parsed.year < 2000 else parsed
 
@@ -90,8 +94,9 @@ def fetch_produto_atributos(brand: str, produtos: list[str]) -> dict[str, dict]:
         produtos: codigos de produto ja resolvidos.
 
     Returns:
-        Dict `{produto: {'grife': str|None, 'fim_vendas': date|None}}`, apenas
-        com produtos que tenham ao menos um dos dois.
+        Dict `{produto: {'grife': str|None, 'fim_vendas': date|None}}`. Produto
+        encontrado sem atributos tem dict vazio; produto nao encontrado nao tem
+        chave. Assim ausencia no ERP nao pode apagar um snapshot valido.
 
     Raises:
         Exception: falha de conexao/consulta (o chamador decide se degrada).
@@ -122,9 +127,10 @@ def fetch_produto_atributos(brand: str, produtos: list[str]) -> dict[str, dict]:
                 tuple(lote),
             )
             for produto, grife in cur.fetchall():
+                entry = out.setdefault(str(produto).strip(), {})
                 texto = "" if grife is None else str(grife).strip()
                 if texto:
-                    out.setdefault(str(produto).strip(), {})["grife"] = texto
+                    entry["grife"] = texto
 
             # A trava vive por COR; o que bloqueia o faturamento e a primeira a
             # vencer, entao o produto carrega o MENOR FIM_VENDAS real. MIN()
@@ -141,7 +147,9 @@ def fetch_produto_atributos(brand: str, produtos: list[str]) -> dict[str, dict]:
                 if parsed is None:
                     continue
                 key = str(produto).strip()
-                entry = out.setdefault(key, {})
+                entry = out.get(key)
+                if entry is None:
+                    continue  # Uma cor orfa nao comprova existencia em PRODUTOS.
                 atual = entry.get("fim_vendas")
                 if atual is None or parsed < atual:
                     entry["fim_vendas"] = parsed
@@ -202,8 +210,16 @@ def sync_linx_attributes(brand_filter: str | None = None) -> dict:
         prop_cert = cfg["prop_validade_certificado"]
         prop_lic = cfg["prop_vencimento_licenciamento"]
         try:
-            props = fetch_produto_propriedades(brand, [prop_cert, prop_lic], skus)
+            props = fetch_produto_propriedades(
+                brand, [prop_cert, prop_lic], skus, strict_prop_codes=[prop_lic]
+            )
             atributos = fetch_produto_atributos(brand, skus)
+            # Validar antes de abrir a transacao de escrita: valor ilegivel nao
+            # e equivalente a uma sentinela/vazio confirmado no ERP.
+            licencas = {
+                sku: parse_linx_date(props.get(sku, {}).get(prop_lic), strict=True)
+                for sku in skus if sku in atributos
+            }
         except Exception as e:
             # "Linx indisponivel" nao pode virar "sem licenca": a marca inteira
             # fica com os valores anteriores e o linx_synced_at antigo.
@@ -211,16 +227,24 @@ def sync_linx_attributes(brand_filter: str | None = None) -> dict:
             result["errors"].append({"brand": brand, "error": type(e).__name__})
             continue
 
+        ausentes = sum(sku not in atributos for sku in skus)
+        if ausentes:
+            result["errors"].append({
+                "brand": brand, "error": "Produtos nao encontrados no Linx; snapshot anterior preservado",
+                "count": ausentes,
+            })
         updated = 0
         with db() as (conn, cur):
             for sku in skus:
+                if sku not in atributos:
+                    continue
                 valores = props.get(sku, {})
                 extra = atributos.get(sku, {})
                 cur.execute(
                     _UPDATE_SQL,
                     [
                         extra.get("grife"),
-                        parse_linx_date(valores.get(prop_lic)),
+                        licencas[sku],
                         parse_linx_date(valores.get(prop_cert)),
                         extra.get("fim_vendas"),
                         sku,
@@ -234,7 +258,7 @@ def sync_linx_attributes(brand_filter: str | None = None) -> dict:
                 "brand": brand,
                 "skus": len(skus),
                 "updated": updated,
-                "com_licenciamento": sum(1 for s in skus if parse_linx_date(props.get(s, {}).get(prop_lic))),
+                "com_licenciamento": sum(1 for value in licencas.values() if value),
                 "com_grife": sum(1 for s in skus if atributos.get(s, {}).get("grife")),
             }
         )

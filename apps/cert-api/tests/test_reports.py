@@ -453,7 +453,7 @@ class TestTravaFaturamento:
 
         mocker.patch(
             "app.db.sqlserver.fetch_produto_propriedades",
-            side_effect=lambda brand, props, skus: (
+            side_effect=lambda brand, props, skus, *, strict_prop_codes: (
                 {"PI7223Y": {"00106": "24/07/2026", "00107": "31/12/2026"}}
                 if brand == "Imaginarium"
                 else {"100400496": {"00224": "11/08/2027"}}

@@ -1,9 +1,12 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '@/shared/utils/errors';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
 import {
+  certProductQuery,
+  downloadCertApiResource,
+  upcomingLicenseFilters,
   fetchCertGrifes,
   fetchCertProducts,
   fetchLastCertSync,
@@ -11,6 +14,7 @@ import {
   verifyCertProduct,
   type CertSyncRun,
 } from '@/shared/lib/cert-api-client';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { cn, formatDateTime, formatDate } from '@/shared/lib/utils';
 import {
@@ -291,6 +295,8 @@ const STOCK_UNKNOWN_TITLE =
 
 export default function CertProdutosPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+  const canExport = user?.role === 'admin' || user?.role === 'analyst';
 
   const [products, setProducts] = useState<CertProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -311,6 +317,31 @@ export default function CertProdutosPage() {
   const [verifying, setVerifying] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [licenseStartDate, setLicenseStartDate] = useState(
+    searchParams.get('license_start_date') || '',
+  );
+  const [licenseEndDate, setLicenseEndDate] = useState(searchParams.get('license_end_date') || '');
+  const [exporting, setExporting] = useState(false);
+
+  // Voltar/avançar restaura os filtros da URL; setters idempotentes evitam
+  // novas consultas quando o evento local já atualizou o mesmo estado.
+  useEffect(() => {
+    setLicenseStartDate(searchParams.get('license_start_date') || '');
+    setLicenseEndDate(searchParams.get('license_end_date') || '');
+    setStatusFilters((previous) => {
+      const next = {
+        cert_status: searchParams.get('cert_status') || '',
+        site_status: searchParams.get('site_status') || '',
+        license_status: searchParams.get('license_status') || '',
+      };
+      return Object.keys(next).every(
+        (key) => previous[key as FilterField] === next[key as FilterField],
+      )
+        ? previous
+        : next;
+    });
+    setPage(1);
+  }, [searchParams]);
   const [sortField, setSortField] = useState<SortField>(DEFAULT_SORT_FIELD);
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR);
   /** SKU cujo tooltip de estoque do CD está aberto por clique/foco (item 5). */
@@ -324,28 +355,41 @@ export default function CertProdutosPage() {
   const syncPendencias = sheetsSyncPendencias(lastSync);
   // Filtro de licenciamento por DATA (tudo menos "Pendente") sem o Linx lido.
   const licenseFilterWithoutLinx =
-    Boolean(statusFilters.license_status) &&
-    statusFilters.license_status !== 'PENDENTE' &&
-    !linxWasRead(lastSync);
+    Boolean(
+      licenseStartDate ||
+      licenseEndDate ||
+      (statusFilters.license_status && statusFilters.license_status !== 'PENDENTE'),
+    ) && !linxWasRead(lastSync);
 
+  const invalidLicenseRange = Boolean(
+    licenseStartDate && licenseEndDate && licenseStartDate > licenseEndDate,
+  );
+  const productFilters = useMemo(
+    () => ({
+      search: search || undefined,
+      brand: brand || undefined,
+      grife: grife || undefined,
+      cert_status: statusFilters.cert_status || undefined,
+      site_status: statusFilters.site_status || undefined,
+      license_status: statusFilters.license_status || undefined,
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
+      license_start_date: licenseStartDate || undefined,
+      license_end_date: licenseEndDate || undefined,
+    }),
+    [search, brand, grife, statusFilters, startDate, endDate, licenseStartDate, licenseEndDate],
+  );
   const latestRequest = useRef(0);
 
   const loadProducts = useCallback(async () => {
     const requestId = ++latestRequest.current;
     setLoading(true);
     try {
-      const data = await fetchCertProducts({
-        page,
-        per_page: perPage,
-        search: search || undefined,
-        brand: brand || undefined,
-        grife: grife || undefined,
-        cert_status: statusFilters.cert_status || undefined,
-        site_status: statusFilters.site_status || undefined,
-        license_status: statusFilters.license_status || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-      });
+      if (invalidLicenseRange) {
+        setLoadError('O início do período de licenciamento deve ser anterior ou igual ao fim.');
+        return;
+      }
+      const data = await fetchCertProducts({ page, per_page: perPage, ...productFilters });
       if (requestId !== latestRequest.current) return;
       setProducts(data.products || []);
       setTotalPages(data.total_pages || 1);
@@ -358,18 +402,7 @@ export default function CertProdutosPage() {
     } finally {
       if (requestId === latestRequest.current) setLoading(false);
     }
-  }, [
-    page,
-    perPage,
-    search,
-    brand,
-    grife,
-    statusFilters.cert_status,
-    statusFilters.site_status,
-    statusFilters.license_status,
-    startDate,
-    endDate,
-  ]);
+  }, [page, perPage, productFilters, invalidLicenseRange]);
 
   useEffect(() => {
     loadProducts();
@@ -436,16 +469,60 @@ export default function CertProdutosPage() {
   }
 
   function handleStatusFilterChange(field: FilterField, value: string) {
-    setStatusFilters((prev) => {
-      const next = { ...prev, [field]: value };
-      const params: Record<string, string> = {};
-      if (next.cert_status) params.cert_status = next.cert_status;
-      if (next.site_status) params.site_status = next.site_status;
-      if (next.license_status) params.license_status = next.license_status;
-      setSearchParams(params);
-      return next;
-    });
+    const next = { ...statusFilters, [field]: value };
+    const params = new URLSearchParams(searchParams);
+    for (const key of ['cert_status', 'site_status', 'license_status'] as const) {
+      if (next[key]) params.set(key, next[key]);
+      else params.delete(key);
+    }
+    setStatusFilters(next);
+    setSearchParams(params);
     setPage(1);
+  }
+
+  function changeLicenseDates(start: string, end: string, clearStatus = false) {
+    setLicenseStartDate(start);
+    setLicenseEndDate(end);
+    setPage(1);
+    const params = new URLSearchParams(searchParams);
+    if (start) params.set('license_start_date', start);
+    else params.delete('license_start_date');
+    if (end) params.set('license_end_date', end);
+    else params.delete('license_end_date');
+    if (clearStatus) {
+      setStatusFilters((prev) => ({ ...prev, license_status: '' }));
+      params.delete('license_status');
+    }
+    setSearchParams(params);
+  }
+
+  function showLicenseStatus(status: string) {
+    setLicenseStartDate('');
+    setLicenseEndDate('');
+    setPage(1);
+    setStatusFilters((prev) => ({ ...prev, license_status: status }));
+    const params = new URLSearchParams(searchParams);
+    params.delete('license_start_date');
+    params.delete('license_end_date');
+    params.set('license_status', status);
+    setSearchParams(params);
+  }
+
+  async function exportFilteredProducts() {
+    if (invalidLicenseRange || !canExport) return;
+    setExporting(true);
+    try {
+      await downloadCertApiResource(
+        `/api/reports/export?${certProductQuery(productFilters)}`,
+        'produtos_filtrados.xlsx',
+        { method: 'POST' },
+      );
+      toast.success('Relatório dos produtos filtrados exportado.');
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setExporting(false);
+    }
   }
 
   function handleBrandChange(newBrand: string) {
@@ -467,6 +544,8 @@ export default function CertProdutosPage() {
     setSearchInput('');
     setStartDate('');
     setEndDate('');
+    setLicenseStartDate('');
+    setLicenseEndDate('');
     setSortField(DEFAULT_SORT_FIELD);
     setSortDir(DEFAULT_SORT_DIR);
     setPage(1);
@@ -563,7 +642,9 @@ export default function CertProdutosPage() {
     grife ||
     search ||
     startDate ||
-    endDate;
+    endDate ||
+    licenseStartDate ||
+    licenseEndDate;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -658,6 +739,58 @@ export default function CertProdutosPage() {
         </div>
       </div>
 
+      <section
+        aria-label="Licenciamento no Linx"
+        className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-3"
+      >
+        <p className="text-sm font-semibold">Vencimento do licenciamento (Linx)</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Fonte: última leitura do Linx, somente leitura. Filtrar ou exportar não altera datas no
+          ERP.
+        </p>
+        <div className="flex flex-wrap gap-3 items-center">
+          <DateRangeFilter
+            label="Vencimento do licenciamento (Linx)"
+            startDate={licenseStartDate}
+            endDate={licenseEndDate}
+            onStartDateChange={(value) => changeLicenseDates(value, licenseEndDate)}
+            onEndDateChange={(value) => changeLicenseDates(licenseStartDate, value)}
+          />
+          <button
+            type="button"
+            className="rounded-lg border px-3 py-2 text-sm"
+            onClick={() => {
+              const range = upcomingLicenseFilters();
+              changeLicenseDates(range.license_start_date!, range.license_end_date!, true);
+            }}
+          >
+            Próximos 30 dias
+          </button>
+          <button
+            type="button"
+            className="rounded-lg border px-3 py-2 text-sm"
+            onClick={() => showLicenseStatus('VENCIDO')}
+          >
+            Licenciamentos vencidos
+          </button>
+          {canExport && (
+            <button
+              type="button"
+              className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+              disabled={exporting || loading || invalidLicenseRange}
+              onClick={exportFilteredProducts}
+            >
+              {exporting ? 'Exportando…' : 'Exportar produtos filtrados'}
+            </button>
+          )}
+        </div>
+        {invalidLicenseRange && (
+          <p role="alert" className="text-sm text-danger-600">
+            O início do período de licenciamento deve ser anterior ou igual ao fim.
+          </p>
+        )}
+      </section>
+
       {/* ── Search + Brand Filters ── */}
       <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 p-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -688,6 +821,7 @@ export default function CertProdutosPage() {
 
           {/* Date Range Filter */}
           <DateRangeFilter
+            label="Data da validação"
             startDate={startDate}
             endDate={endDate}
             onStartDateChange={(v) => {
@@ -863,7 +997,7 @@ export default function CertProdutosPage() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => handleStatusFilterChange('license_status', 'PENDENTE')}
+                  onClick={() => showLicenseStatus('PENDENTE')}
                   className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-50 dark:border-amber-700 dark:bg-slate-800 dark:text-amber-400"
                 >
                   Ver licenciamento pendente
@@ -1043,6 +1177,11 @@ export default function CertProdutosPage() {
                         )}
                       </td>
                       <td className="px-5 py-3.5">
+                        <p className="mb-1 text-[10px] text-slate-500 dark:text-slate-400">
+                          {p.linx_synced_at
+                            ? `Linx lido em ${formatDateTime(p.linx_synced_at)}`
+                            : 'Leitura Linx não registrada'}
+                        </p>
                         {/* Prazo de licenciamento (distinto de sale_deadline) */}
                         {p.license_deadline ? (
                           <span

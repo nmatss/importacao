@@ -166,7 +166,7 @@ def fetch_barcode_map(brand: str, codes: list[str] | None = None) -> dict[str, s
 
 
 def fetch_produto_propriedades(
-    brand: str, prop_codes: list[str], produtos: list[str]
+    brand: str, prop_codes: list[str], produtos: list[str], *, strict_prop_codes: list[str] | None = None
 ) -> dict[str, dict[str, str]]:
     """Le, em lote, o valor de propriedades de produto no Linx (PROP_PRODUTOS).
 
@@ -184,6 +184,9 @@ def fetch_produto_propriedades(
         brand: marca (escolhe o banco/credencial).
         prop_codes: codigos de PROPRIEDADE a buscar (ex.: ['00224', '00225']).
         produtos: codigos de produto a consultar.
+        strict_prop_codes: propriedades singulares cuja cardinalidade e item
+            devem ser validados. Outras propriedades preservam a leitura legada;
+            uma ambiguidade de certificacao nao invalida a leitura da licenca.
 
     Returns:
         Dict {produto: {prop_code: valor}}, apenas com valor nao vazio. Produto
@@ -201,6 +204,10 @@ def fetch_produto_propriedades(
     col_prop = _ident(LINX_SCHEMA["prop_col_propriedade"])
     col_val = _ident(LINX_SCHEMA["prop_col_valor"])
 
+    strict = {code.strip() for code in strict_prop_codes or []}
+    item_select = ", " + _ident(LINX_SCHEMA["prop_col_item"]) if strict else ""
+    expected_item = int(LINX_SCHEMA["prop_item_value"]) if strict else None
+    seen: set[tuple[str, str]] = set()
     alvo = sorted({p.strip() for p in produtos if p and p.strip()})
     out: dict[str, dict[str, str]] = {}
 
@@ -213,16 +220,25 @@ def fetch_produto_propriedades(
             ph_prod = ",".join(["%s"] * len(lote))
             ph_prop = ",".join(["%s"] * len(prop_codes))
             cur.execute(
-                f"SELECT LTRIM(RTRIM({col_prod})), {col_prop}, {col_val} "  # noqa: S608
+                f"SELECT LTRIM(RTRIM({col_prod})), {col_prop}, {col_val}{item_select} "  # noqa: S608
                 f"FROM {table} "
                 f"WHERE {col_prop} IN ({ph_prop}) AND LTRIM(RTRIM({col_prod})) IN ({ph_prod})",
                 (*prop_codes, *lote),
             )
-            for produto, prop, valor in cur.fetchall():
+            for row in cur.fetchall():
+                produto, prop, valor = row[:3]
+                key, prop_key = str(produto).strip(), str(prop).strip()
+                if prop_key in strict:
+                    identity = (key, prop_key)
+                    if row[3] != expected_item or identity in seen:
+                        raise LinxPropertyCardinalityError(
+                            "Leitura Linx ambigua: propriedade singular com cardinalidade ou item inesperado"
+                        )
+                    seen.add(identity)
                 texto = "" if valor is None else str(valor).strip()
                 if not texto:
                     continue
-                out.setdefault(str(produto).strip(), {})[str(prop).strip()] = texto
+                out.setdefault(key, {})[prop_key] = texto
 
     return out
 

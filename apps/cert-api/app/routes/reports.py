@@ -11,10 +11,12 @@ from slowapi.util import get_remote_address
 
 from app.config import DATABASE_URL, REPORTS_DIR
 from app.db.postgres import db
+from app.services.derivation import compute_status_dimensions
 from app.services.erp_service import (
     normalize_brand_filter as _normalize_brand,
 )
 from app.services.erp_service import safe_license_map
+from app.services.product_filters import matches_derived_filters, parse_csv_filter, product_filter_sql
 from app.services.report_service import (
     generate_products_report,
     generate_stock_report,
@@ -38,9 +40,25 @@ def _safe_export_error(exc: Exception) -> HTTPException:
 @router.post("/api/reports/export")
 @limiter.limit("10/minute")
 def export_products_report(
-    request: Request, brand: str = Query(""), status: str = Query("")
+    request: Request,
+    brand: str = Query(""),
+    status: str = Query(""),
+    search: str = Query(""),
+    grife: str = Query(""),
+    start_date: str = Query(""),
+    end_date: str = Query(""),
+    license_start_date: str = Query(""),
+    license_end_date: str = Query(""),
+    cert_status: str = Query(""),
+    site_status: str = Query(""),
+    license_status: str = Query(""),
+    comercializacao_status: str = Query(""),
 ) -> FileResponse:
     """Generate and download an Excel report for cert_products.
+
+    Uses the same SQL and derived-axis filters as /api/products, without
+    pagination. License date bounds are inclusive and exclude sentinel dates;
+    validation date bounds keep their separate existing meaning.
 
     Args:
         brand: Optional brand filter.
@@ -52,41 +70,34 @@ def export_products_report(
     Raises:
         HTTPException: 500 if database not configured.
     """
+    try:
+        where, params = product_filter_sql(
+            search=search, brand=brand, grife=grife, status=status,
+            start_date=start_date, end_date=end_date,
+            license_start_date=license_start_date, license_end_date=license_end_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
     if not DATABASE_URL:
         raise HTTPException(500, "Database not configured")
 
     with db() as (conn, cur):
-        conditions: list[str] = []
-        params: list = []
-        if brand:
-            conditions.append("LOWER(REPLACE(brand, '_', ' ')) = %s")
-            params.append(_normalize_brand(brand))
-        if status:
-            statuses = [s.strip() for s in status.split(",") if s.strip()]
-            if "EXPIRED" in statuses:
-                statuses.remove("EXPIRED")
-                if statuses:
-                    conditions.append(
-                        "(last_validation_status IN ({}) OR is_expired = TRUE)".format(
-                            ",".join(["%s"] * len(statuses))
-                        )
-                    )
-                    params.extend(statuses)
-                else:
-                    conditions.append("is_expired = TRUE")
-            elif statuses:
-                conditions.append(
-                    "last_validation_status IN ({})".format(",".join(["%s"] * len(statuses)))
-                )
-                params.extend(statuses)
-
-        where = "WHERE " + " AND ".join(conditions) if conditions else ""
         cur.execute(f"SELECT * FROM cert_products {where} ORDER BY brand, sku", params)
         rows = [dict(r) for r in cur.fetchall()]
 
+    license_map = safe_license_map()
+    derived_filters = tuple(parse_csv_filter(value) for value in (
+        cert_status, site_status, license_status, comercializacao_status,
+    ))
+    if any(derived_filters):
+        rows = [row for row in rows if matches_derived_filters(
+            compute_status_dimensions(row, license_map), *derived_filters,
+        )]
+
     try:
         filepath = generate_products_report(
-            rows, brand=brand, status=status, license_map=safe_license_map(), sync_warning=snapshot_sync_warning()
+            rows, brand=brand, status=status, license_map=license_map, sync_warning=snapshot_sync_warning()
         )
     except Exception as exc:
         raise _safe_export_error(exc) from exc
