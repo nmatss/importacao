@@ -18,10 +18,12 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
     linkCertificateItems: vi.fn(),
     removeCertificateItem: vi.fn(),
     updateCertificateItemRestriction: vi.fn(),
+    batchCertificateItems: vi.fn(),
   };
 });
 
 import {
+  batchCertificateItems,
   createCertificate,
   fetchCertProductDetail,
   fetchCertificateDetail,
@@ -31,6 +33,7 @@ import {
   removeCertificateItem,
   updateCertificateItemRestriction,
   type CertCertificate,
+  type CertItemsBatchResult,
 } from '@/shared/lib/cert-api-client';
 import CertCadastroPage, { parsePastedSkus, todayLocalIso } from './CertCadastroPage';
 
@@ -258,6 +261,8 @@ describe('parsePastedSkus', () => {
     expect(parsePastedSkus('A\nB\n\nA\nC')).toEqual(['A', 'B', 'C']);
     expect(parsePastedSkus('A, B; C')).toEqual(['A', 'B', 'C']);
     expect(parsePastedSkus('   ')).toEqual([]);
+    // TAB (duas colunas coladas do Excel) separa como no servidor — nunca um SKU com TAB dentro.
+    expect(parsePastedSkus('A\tB')).toEqual(['A', 'B']);
   });
 });
 
@@ -538,6 +543,7 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
 function loadCreateContract(): {
   encerrado: Record<string, string>;
   ativo: Record<string, string>;
+  lote: { linhas: string[]; motivo: string; encerrar_itens_com_data: boolean; dry_run: boolean };
 } {
   const relative = 'apps/cert-api/tests/fixtures/certificate_create_contract.json';
   const candidates = [
@@ -724,4 +730,268 @@ describe('createCertificate (cliente real) — multipart do contrato', () => {
       expect(sent).toEqual(contract);
     },
   );
+});
+
+// ── C2: carga em lote "SKU;data" — lista de produtos e suas respectivas datas.
+// Quem interpreta e valida as linhas é o SERVIDOR; a tela manda o texto cru,
+// mostra a prévia por linha e só libera a gravação com a prévia válida.
+const mockedBatch = vi.mocked(batchCertificateItems);
+
+function batchResult(overrides: Partial<CertItemsBatchResult> = {}): CertItemsBatchResult {
+  return {
+    dry_run: true,
+    valid: true,
+    total_linhas: 2,
+    resumo: { vincular: 1, vincular_e_encerrar: 0, encerrar: 1, sem_alteracao: 0, erro: 0 },
+    linhas: [
+      {
+        linha: 1,
+        conteudo: 'PI5555Y;29/10/2026',
+        sku: 'PI5555Y',
+        fim_venda: '2026-10-29',
+        acao: 'encerrar',
+        status: 'ok',
+        mensagem: 'Encerrar o item com fim de venda em 29/10/2026',
+        aviso: null,
+      },
+      {
+        linha: 2,
+        conteudo: 'PI7001Y',
+        sku: 'PI7001Y',
+        fim_venda: null,
+        acao: 'vincular',
+        status: 'ok',
+        mensagem: 'Vincular ao certificado (herda a situacao do certificado)',
+        aviso: null,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe('CertCadastroPage — carga em lote SKU;data', () => {
+  const lote = loadCreateContract().lote;
+
+  beforeEach(() => {
+    mockedFetchCertificates.mockReset();
+    mockedDetail.mockReset();
+    mockedBatch.mockReset();
+    mockedLink.mockReset();
+    mockedFetchCertificates.mockResolvedValue({
+      items: [certificate()],
+      total: 1,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    mockedDetail.mockResolvedValue(
+      certificate({
+        items: [
+          {
+            id: 'i1',
+            certificate_id: 'c1',
+            sku: 'PI5555Y',
+            brand: 'imaginarium',
+            linx_status: 'disabled',
+          },
+        ],
+      }),
+    );
+  });
+
+  async function openBatchMode(user: ReturnType<typeof userEvent.setup>) {
+    render(<CertCadastroPage />);
+    await user.click(await screen.findByRole('button', { name: /Itens \(2\)/ }));
+    await user.click(await screen.findByRole('button', { name: 'SKU;data' }));
+  }
+
+  async function fillBatch(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText(/Produtos e datas/), lote.linhas.join('\n'));
+    await user.click(screen.getByLabelText(/Encerrar os itens com data/));
+    await user.type(screen.getByLabelText('Motivo do lote *'), lote.motivo);
+  }
+
+  it('mostra o formato com exemplo e exige motivo antes da prévia', async () => {
+    const user = userEvent.setup();
+    await openBatchMode(user);
+
+    expect(screen.getByText(/PI7001Y;30\/10\/2026/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Produtos e datas/), 'PI7001Y;30/10/2026');
+    expect(screen.getByRole('button', { name: /Pré-visualizar lote \(1\)/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+  });
+
+  it('manda as linhas cruas do contrato e mostra o que será feito por linha', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockResolvedValue(batchResult());
+    await openBatchMode(user);
+    await fillBatch(user);
+
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote \(2\)/ }));
+
+    await waitFor(() =>
+      expect(mockedBatch).toHaveBeenCalledWith('c1', {
+        linhas: lote.linhas,
+        motivo: lote.motivo,
+        encerrarItensComData: lote.encerrar_itens_com_data,
+        dryRun: true,
+      }),
+    );
+    const preview = await screen.findByRole('table', { name: /Prévia do lote/ });
+    expect(
+      within(preview).getByText('Encerrar o item com fim de venda em 29/10/2026'),
+    ).toBeVisible();
+    expect(within(preview).getByText(/Vincular ao certificado/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeEnabled();
+  });
+
+  it('com erro em uma linha mostra número, conteúdo e motivo — e não deixa gravar', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockResolvedValue(
+      batchResult({
+        valid: false,
+        resumo: { vincular: 0, vincular_e_encerrar: 0, encerrar: 1, sem_alteracao: 0, erro: 1 },
+        linhas: [
+          batchResult().linhas[0],
+          {
+            linha: 2,
+            conteudo: 'PI7001Y;31/02/2026',
+            sku: 'PI7001Y',
+            fim_venda: null,
+            acao: null,
+            status: 'erro',
+            mensagem: "Data invalida: '31/02/2026'. Use dd/mm/aaaa (ex.: 30/10/2026)",
+            aviso: null,
+          },
+        ],
+      }),
+    );
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+
+    const preview = await screen.findByRole('table', { name: /Prévia do lote/ });
+    const errorRow = within(preview).getByText('PI7001Y;31/02/2026').closest('tr') as HTMLElement;
+    expect(within(errorRow).getByText('2')).toBeInTheDocument();
+    expect(within(errorRow).getByText(/Data invalida/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nada será gravado enquanto houver linha com erro/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+  });
+
+  it('editar o texto depois da prévia exige nova prévia', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockResolvedValue(batchResult());
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeEnabled(),
+    );
+
+    await user.type(screen.getByLabelText(/Produtos e datas/), '\nOUTRO;01/11/2026');
+
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+    expect(screen.queryByRole('table', { name: /Prévia do lote/ })).not.toBeInTheDocument();
+  });
+
+  it('confirma com dry_run=false, atualiza os itens e trava o botão', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockResolvedValueOnce(batchResult());
+    mockedBatch.mockResolvedValueOnce(
+      batchResult({
+        dry_run: false,
+        linhas: batchResult().linhas.map((l) => ({ ...l, status: 'aplicado' as const })),
+        items: [
+          {
+            id: 'i1',
+            certificate_id: 'c1',
+            sku: 'PI5555Y',
+            brand: 'imaginarium',
+            linx_status: 'pending',
+            situacao: 'ENCERRADO',
+            situacao_efetiva: 'ENCERRADO',
+            fim_venda: '2026-10-29',
+            fim_venda_efetivo: '2026-10-29',
+            restricao_origem: 'item',
+          },
+          {
+            id: 'i2',
+            certificate_id: 'c1',
+            sku: 'PI7001Y',
+            brand: 'imaginarium',
+            linx_status: 'disabled',
+          },
+        ],
+      }),
+    );
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeEnabled(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar lote' }));
+
+    await waitFor(() =>
+      expect(mockedBatch).toHaveBeenLastCalledWith('c1', {
+        linhas: lote.linhas,
+        motivo: lote.motivo,
+        encerrarItensComData: true,
+        dryRun: false,
+      }),
+    );
+    expect(await screen.findByText(/Fim de venda: 29\/10\/2026/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Encerrar item PI7001Y' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled(),
+    );
+    expect(mockedBatch).toHaveBeenCalledTimes(2);
+    expect(mockedLink).not.toHaveBeenCalled();
+  });
+
+  it('mostra o erro do servidor quando a prévia falha', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockRejectedValue(new Error('Erro na API: Envie no maximo 500 linhas por vez'));
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no maximo 500 linhas/);
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+  });
+});
+
+describe('batchCertificateItems (cliente real) — corpo do contrato', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('manda exatamente o JSON que o cert-api valida', async () => {
+    const lote = loadCreateContract().lote;
+    const actual = await vi.importActual<typeof import('@/shared/lib/cert-api-client')>(
+      '@/shared/lib/cert-api-client',
+    );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ dry_run: true, valid: true, linhas: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await actual.batchCertificateItems('c1', {
+      linhas: lote.linhas,
+      motivo: lote.motivo,
+      encerrarItensComData: lote.encerrar_itens_com_data,
+      dryRun: lote.dry_run,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/certificates\/c1\/items\/batch$/);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(lote);
+  });
 });

@@ -1,5 +1,5 @@
 {
-  "_doc": "Contrato do cadastro de certificado (POST /api/certificates, multipart). Lido pelos DOIS lados: apps/web/src/features/certificacoes/CertCadastroPage.test.tsx afirma que a tela monta exatamente estes campos, e apps/cert-api/tests/test_certificates_routes.py afirma que o back aceita exatamente estes campos. Mudou um lado? Este arquivo quebra o outro.",
+  "_doc": "Contratos tela <-> cert-api do cadastro de certificados. Lido pelos DOIS lados: apps/web/src/features/certificacoes/CertCadastroPage.test.tsx afirma que a tela/cliente monta exatamente estes campos, e apps/cert-api/tests (test_certificates_routes.py, test_item_restrictions.py) afirmam que o back aceita exatamente estes campos. Mudou um lado? Este arquivo quebra o outro. 'encerrado'/'ativo': POST /api/certificates (multipart). 'lote': POST /api/certificates/{id}/items/batch (JSON).",
   "encerrado": {
     "sku": "PI5558Y",
     "brand": "imaginarium",
@@ -12,5 +12,11 @@
     "brand": "imaginarium",
     "validade_certificado": "2027-03-22",
     "situacao": "ATIVO"
+  },
+  "lote": {
+    "linhas": ["PI5555Y;29/10/2026", "PI7001Y"],
+    "motivo": "Encerramento aprovado pelo fiscal em 17/09",
+    "encerrar_itens_com_data": true,
+    "dry_run": true
   }
 }

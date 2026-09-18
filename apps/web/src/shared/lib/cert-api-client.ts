@@ -780,6 +780,59 @@ export async function linkCertificateItems(
   });
 }
 
+/** O que o servidor decidiu para UMA linha colada da carga `SKU;data`. */
+export interface CertItemsBatchLine {
+  /** Número da linha na caixa de texto (linhas em branco contam). */
+  linha: number;
+  conteudo: string;
+  sku: string | null;
+  /** ISO (AAAA-MM-DD) já interpretado pelo servidor. */
+  fim_venda: string | null;
+  acao: 'vincular' | 'vincular_e_encerrar' | 'encerrar' | 'sem_alteracao' | null;
+  /** `ok`/`erro`/`ignorada` na prévia; `aplicado`/`falhou` depois de gravar. */
+  status: 'ok' | 'erro' | 'ignorada' | 'aplicado' | 'falhou';
+  mensagem: string;
+  aviso?: string | null;
+  linx_status?: LinxStatus | null;
+  linx_error?: string | null;
+}
+
+export interface CertItemsBatchResult {
+  dry_run: boolean;
+  /** `false` = há linha com erro e NADA será (ou foi) gravado. */
+  valid: boolean;
+  total_linhas: number;
+  resumo: Record<
+    'vincular' | 'vincular_e_encerrar' | 'encerrar' | 'sem_alteracao' | 'erro',
+    number
+  >;
+  linhas: CertItemsBatchLine[];
+  items?: CertCertificateItem[];
+}
+
+/**
+ * Carga em lote de produtos e datas (`SKU` ou `SKU;data`, uma por linha).
+ * As linhas vão CRUAS: quem interpreta e valida — com erro por linha — é o
+ * servidor. `dryRun` é o padrão: a prévia é obrigatória antes de gravar.
+ */
+export async function batchCertificateItems(
+  id: string,
+  input: { linhas: string[]; motivo: string; encerrarItensComData: boolean; dryRun?: boolean },
+): Promise<CertItemsBatchResult> {
+  return certFetch<CertItemsBatchResult>(
+    `/api/certificates/${encodeURIComponent(id)}/items/batch`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        linhas: input.linhas,
+        motivo: input.motivo,
+        encerrar_itens_com_data: input.encerrarItensComData,
+        dry_run: input.dryRun ?? true,
+      }),
+    },
+  );
+}
+
 export async function updateCertificateItemRestriction(
   certificateId: string,
   sku: string,
