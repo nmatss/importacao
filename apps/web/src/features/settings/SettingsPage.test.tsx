@@ -109,7 +109,7 @@ describe('SettingsPage — aba Usuários', () => {
     await openTab(/Usuários/);
 
     expect(
-      screen.getByText(/O cadastro nesta aba libera o acesso mesmo fora do grupo Google/i),
+      screen.getByText(/O cadastro nesta aba libera o acesso mesmo fora do grupo\./i),
     ).toBeInTheDocument();
   });
 });
