@@ -10,6 +10,8 @@ from datetime import date, datetime
 
 from app.config import LINX_BRANDS, LINX_SCHEMA, LINX_WRITE_ENABLED, REPORTS_DIR
 from app.db.sqlserver import (
+    LinxPropertyCardinalityError,
+    LinxReconciliationRequiredError,
     _brand_linx,
     fetch_produto_propriedades,
     read_produto_propriedade,
@@ -292,7 +294,15 @@ def write_certificate_to_linx(
             )
     except Exception as e:
         result["status"] = "error"
-        result["error"] = "Falha ao gravar propriedade no Linx"
+        if isinstance(e, LinxReconciliationRequiredError):
+            result["error"] = (
+                "Resultado no Linx nao confirmado apos tentativa de commit; "
+                "reconciliar a propriedade no ERP antes de reenviar. Nao assumir rollback."
+            )
+        elif isinstance(e, LinxPropertyCardinalityError):
+            result["error"] = "Propriedade Linx com item ou cardinalidade inesperada; escrita bloqueada para revisao"
+        else:
+            result["error"] = "Falha ao gravar propriedade no Linx"
         sku_log = sku.replace("\r", " ").replace("\n", " ")
         brand_log = brand.replace("\r", " ").replace("\n", " ")
         log.error(

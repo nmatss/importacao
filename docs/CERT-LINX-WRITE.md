@@ -1,10 +1,12 @@
 # Cadastro de Certificado + Escrita no Linx (PROP_PRODUTOS)
 
-> Status: **LIGADO EM PRODUÇÃO** desde 2026-07-16 (`LINX_WRITE_ENABLED=true` e
-> `LINX_SKU_IS_PRODUTO=true` no SOPS, commit `edd3117`, issue #62 fechada).
-> Schema **confirmado** contra as duas bases em 2026-07-16 (§6). Credenciais por
-> marca ativas (atenção: `ERP_*_USER` ainda é a conta pessoal do Nicolas — migrar
-> para conta de serviço segue pendente).
+> Estado observado em **18/09/2026**: `LINX_WRITE_ENABLED=false` no runtime de
+> produção e no SOPS; `LINX_SKU_IS_PRODUTO=true`. A habilitação registrada em julho
+> é histórica e não representa a configuração atual. SELECTs reais confirmaram
+> conexão e permissões SELECT/INSERT/UPDATE nas duas marcas, sem executar escrita.
+> Há uma duplicidade de produto/propriedade de certificação na Imaginarium; o
+> gravador candidato bloqueia cardinalidade inesperada em vez de atualizar várias linhas.
+> Credenciais pessoais por marca permanecem; migração para conta de serviço é pendência.
 
 Permite que a equipe cadastre certificados pelo painel de Certificações, vincule os
 produtos (SKUs) de cada certificado e, quando o certificado/item está **ENCERRADO**,
@@ -42,7 +44,12 @@ Linx e o resultado é `skipped` (ver `linx_status` em §4).
 
 O valor gravado é a data (texto, `dd/mm/AAAA` por padrão) na coluna de valor de
 `PROP_PRODUTOS`. Se a propriedade não existe para o produto → **INSERT**; se existe com valor
-diferente → **UPDATE**; se já bate → **nada** (`unchanged`).
+diferente → **UPDATE**; se já bate → **nada** (`unchanged`). Antes de escrever,
+exige no máximo uma linha com o item configurado. O UPDATE utiliza a chave completa
+produto/propriedade/item. Após o commit, outra conexão confirma a chave e o valor;
+só então retorna sucesso. Falha de commit ou confirmação exige reconciliação, sem
+retry automático nem promessa de rollback. Isso não comprova propagação para outros
+campos ou efeitos assíncronos do ERP.
 
 ---
 

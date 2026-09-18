@@ -332,10 +332,9 @@ services:
       ERP_PUKET_PASS: ${ERP_PUKET_PASS:-}
       ERP_IMG_USER: ${ERP_IMG_USER:-}
       ERP_IMG_PASS: ${ERP_IMG_PASS:-}
-      # ATENCAO: o default `false` abaixo NAO e o estado de producao. O valor
-      # efetivo e `true` desde 2026-07-16, sobrescrito via SOPS — ou seja, a
-      # escrita no ERP Linx (PROP_PRODUTOS) esta LIGADA. Ver docs/CERT-LINX-WRITE.md.
-      # O default fica em `false` para que qualquer ambiente novo suba sem escrever.
+      # Escrita depende do valor efetivo no SOPS/Compose, conferido pelo deploy.
+      # Default false: habilitar somente no rollout Linx explicitamente autorizado.
+      # Leitura em 2026-09-18 confirmou false; nao inferir estado atual deste comentario.
       LINX_WRITE_ENABLED: ${LINX_WRITE_ENABLED:-false}
       LINX_PROP_TABLE: ${LINX_PROP_TABLE:-PROP_PRODUTOS}
       LINX_PROP_COL_PRODUTO: ${LINX_PROP_COL_PRODUTO:-PRODUTO}

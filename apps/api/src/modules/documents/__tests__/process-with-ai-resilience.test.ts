@@ -88,6 +88,12 @@ vi.mock('pdf-parse', () => ({
   default: vi.fn().mockResolvedValue({ text: 'Extracted PDF text long enough to be real content' }),
 }));
 
+// Poppler has its own tests. Keep subprocess I/O out of these resilience
+// cases so fake timers advance only after the mocked extraction settles.
+vi.mock('../pdf-text.js', () => ({
+  extractPopplerText: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('xlsx', () => ({
   read: vi.fn().mockReturnValue({ SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } }),
   utils: { sheet_to_csv: vi.fn().mockReturnValue('col1,col2\nval1,val2') },

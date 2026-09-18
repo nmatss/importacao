@@ -1,6 +1,7 @@
 """Tests for route authentication and basic contract."""
 
 import json
+from datetime import date
 
 import pytest
 
@@ -109,6 +110,52 @@ async def test_products_list_response_shape(test_client, api_key_headers):
     assert "products" in data
     assert "total" in data
     assert "page" in data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", [
+    "/api/products", "/api/products?cert_status=ATIVO", "/api/expired",
+    "/api/expired?cert_status=ATIVO", "/api/products/SYNTHETIC-PROVENANCE",
+])
+@pytest.mark.parametrize("closure_certificate, sale_status", [
+    ("CERT-CURRENT", "BLOQUEADA"), ("INTERNAL-OLD", "LIBERADA"),
+])
+async def test_product_api_uses_closure_provenance_without_exposing_it(
+    test_client, api_key_headers, mocker, path, closure_certificate, sale_status,
+):
+    from app.routes import certifications
+
+    product = {
+        "sku": "SYNTHETIC-PROVENANCE", "brand": "Puket", "situacao": "ATIVO",
+        "numero_certificado": "CERT-CURRENT",
+        "encerramento_numero_certificado": closure_certificate,
+        "sale_deadline_date": date(2026, 1, 1), "is_expired": True,
+        "last_validation_status": "OK", "licenciamento_aplicavel": False,
+    }
+    context = _db_context(mocker, [product])
+    cursor = context.__enter__.return_value[1]
+
+    def execute(sql, params=None):
+        cursor.fetchone.return_value = (
+            dict(product) if "WHERE sku = %s" in sql else {"cnt": 1, "last_date": None}
+        )
+        cursor.fetchall.return_value = [] if "FROM cert_stock" in sql else [dict(product)]
+
+    cursor.execute.side_effect = execute
+    mocker.patch.object(certifications, "db", return_value=context)
+    mocker.patch.object(certifications, "DATABASE_URL", "postgres://test")
+    mocker.patch.object(certifications, "_safe_license_map", return_value={})
+    mocker.patch("app.services.derivation._today_sp", return_value=date(2026, 9, 18))
+
+    response = await test_client.get(path, headers=api_key_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    result = body["products"][0] if "products" in body else body
+    assert "encerramento_numero_certificado" not in result
+    assert result["numero_certificado"] == "CERT-CURRENT"
+    assert result["cert_status"] == "ATIVO"
+    assert result["status_venda"] == sale_status
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@
 #   PROXY_HEALTH_ENDPOINT /api atraves do nginx, como o browser (default: http://localhost:8085/api/health)
 #   PUBLIC_WEB_HEALTH_ENDPOINT Optional public HTTPS/frontend URL to validate
 #   ALLOW_SYDLE_SYNC_DEPLOY Set to "1" to allow SYDLE_SYNC_ENABLED=true after UAT
+#   EXPECTED_LINX_WRITE_ENABLED Expected effective flag (default: false); true requires explicit authorization
 #   HEALTH_RETRIES        Health check retries (default: 30)
 #   HEALTH_INTERVAL       Seconds between retries (default: 2)
 #   SKIP_BACKUP           Set to "1" to skip DB backup (NOT recommended)
@@ -35,6 +36,7 @@ WEB_HEALTH_ENDPOINT="${WEB_HEALTH_ENDPOINT:-http://localhost:8085/}"
 PROXY_HEALTH_ENDPOINT="${PROXY_HEALTH_ENDPOINT:-http://localhost:8085/api/health}"
 PUBLIC_WEB_HEALTH_ENDPOINT="${PUBLIC_WEB_HEALTH_ENDPOINT:-}"
 ALLOW_SYDLE_SYNC_DEPLOY="${ALLOW_SYDLE_SYNC_DEPLOY:-0}"
+EXPECTED_LINX_WRITE_ENABLED="${EXPECTED_LINX_WRITE_ENABLED:-false}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}"
 LOG_FILE="deploy.log"
@@ -70,6 +72,10 @@ notify() {
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 info "=== Deploy importacao to ${SERVER} ==="
+if [[ "${EXPECTED_LINX_WRITE_ENABLED}" != "false" && "${EXPECTED_LINX_WRITE_ENABLED}" != "true" ]]; then
+  error "EXPECTED_LINX_WRITE_ENABLED must be false or true. Review the authorized Linx write setting."
+  exit 1
+fi
 
 # 1. Ensure on master
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -202,6 +208,35 @@ if ssh "${DEPLOY_USER}@${SERVER}" "test -f ${DEPLOY_DIR}/.env.sops.yaml"; then
 else
   error "Missing ${DEPLOY_DIR}/.env.sops.yaml after sync. Deploy aborted."
   notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: .env.sops.yaml missing"
+  exit 1
+fi
+
+info "Checking effective Linx write flag after SOPS generation..."
+if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && python3 - '${COMPOSE_FILE}' '${EXPECTED_LINX_WRITE_ENABLED}'" <<'LINX_PY'
+import json
+import subprocess
+import sys
+
+try:
+    result = subprocess.run(
+        ["docker", "compose", "-f", sys.argv[1], "config", "--format", "json"],
+        capture_output=True, text=True, timeout=60, check=True,
+    )
+    # Compose contains credentials: parse in memory, never print its output or errors.
+    config = json.loads(result.stdout)
+    value = config["services"]["cert-api"]["environment"]["LINX_WRITE_ENABLED"]
+    if not isinstance(value, str) or value not in ("true", "false"):
+        raise ValueError("Unexpected Linx flag format")
+    if value != sys.argv[2]:
+        print("Linx write flag differs from the authorized release expectation.", file=sys.stderr)
+        sys.exit(1)
+except Exception:
+    print("Cannot verify the effective Linx write flag; deployment blocked.", file=sys.stderr)
+    sys.exit(1)
+print("Effective Linx write flag matches the release expectation.")
+LINX_PY
+then
+  error "Linx write verification failed. Review the SOPS/Compose flag and explicit write authorization before deploying."
   exit 1
 fi
 

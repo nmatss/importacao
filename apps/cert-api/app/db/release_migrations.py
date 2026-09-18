@@ -6,14 +6,16 @@ from pathlib import Path
 from app.db.postgres import close_pool, db, ensure_tables, verify_item_restriction_schema
 
 MIGRATION = Path(__file__).resolve().parents[2] / "sql" / "20260912_certificate_item_restrictions.sql"
+ENCERRAMENTO_MIGRATION = MIGRATION.with_name("20260918_encerramento_provenance.sql")
 
 
 def apply_release_migrations() -> None:
     # Validate the packaged artifact before changing any schema.
-    sql = MIGRATION.read_text(encoding="utf-8")
+    statements = [path.read_text(encoding="utf-8") for path in (MIGRATION, ENCERRAMENTO_MIGRATION)]
     ensure_tables()
-    with db() as (_conn, cur):
-        cur.execute(sql)
+    for sql in statements:
+        with db() as (_conn, cur):
+            cur.execute(sql)
     verify_item_restriction_schema()
 
 

@@ -3,6 +3,8 @@
 Cabecalhos e valores reproduzidos da planilha real (conferidos em 2026-08-07).
 """
 
+import pytest
+
 from app.services.erp_service import (
     _ATIVOS_SHEETS,
     _canonical_brand,
@@ -301,8 +303,43 @@ class TestReadEncerramentos:
         out = self._ler([self._linha("PI7999Y", "31/12/2030", "Comerciação Permitida")])
         assert out[0]["is_expired"] is False
 
-    def test_linha_sem_prazo_e_sem_status_e_ignorada(self):
-        assert self._ler([self._linha("PI0000Y", "", "")]) == []
+    def test_linha_sem_prazo_status_e_certificado_e_ignorada(self):
+        assert self._ler([self._linha("PI0000Y", "", "", cert="  ")]) == []
+
+    @pytest.mark.parametrize("certificado", [" c - 1 ", "C-ANTIGO"])
+    def test_encerramento_identificado_sem_prazo_chega_a_derivacao(self, certificado):
+        from datetime import date
+
+        from app.services.derivation import compute_status_dimensions
+
+        sheet = _FakeSpreadsheet({"Encerramentos": [
+            ENCERRAMENTOS_HEADERS,
+            self._linha("PI0000Y", "", "", cert=certificado),
+            self._linha("PI0001Y", "01/01/2020", "Vencido - Venda Bloqueada"),
+        ]})
+        lidos = _read_encerramentos_from_sheets(sheet, strict=True, exigir_dupla=False)
+        assert {row["sku"] for row in lidos} == {"PI0000Y", "PI0001Y"}
+        produto = {
+            "sku": "PI0000Y", "numero_certificado": "C-1", "situacao": "Ativo",
+            "last_validation_status": "OK",
+        }
+        aplicaveis, _ = resolver_encerramentos([produto], lidos)
+        encerramento = next((row for row in aplicaveis if row["sku"] == produto["sku"]), None)
+        if certificado == "C-ANTIGO":
+            assert encerramento is None
+            assert compute_status_dimensions(produto, today=date(2026, 9, 18))["status_venda"] == "LIBERADA"
+        else:
+            # Pertencer aos aplicaveis protege o SKU da limpeza do sync.
+            assert encerramento is not None
+            for campo in ("sale_deadline", "sale_deadline_date", "encerramento_status", "is_expired"):
+                produto[campo] = encerramento[campo]
+            produto["encerramento_numero_certificado"] = encerramento["numero_certificado"]
+            dims = compute_status_dimensions(produto, today=date(2026, 9, 18))
+            assert dims["cert_status"] == "ATIVO"
+            assert dims["status_venda"] == "BLOQUEADA"
+            assert dims["comercializacao_status"] == "PENDENTE"
+            assert dims["status_venda_reason"]
+            assert dims["site_status"] == "NAO_CONFORME"
 
     def test_marca_normalizada(self):
         out = self._ler([self._linha("PI7560Y", "", "Comerciação Permitida", marca="IMAGINARIUM")])
@@ -353,6 +390,52 @@ class TestResolverEncerramentos:
         )
         assert [a["sku"] for a in aplicaveis] == ["PI5914Y"]
         assert historicos == []
+
+    def test_ativo_preserva_mesmo_certificado_independente_da_ordem(self):
+        atual = self._enc("SKU", "24/07/2026", " c-1 ", "Vencido - Venda Bloqueada")
+        antigo = self._enc("SKU", "01/01/2025", "C-0", "Vencido - Venda Bloqueada")
+        for linhas in ([atual, antigo], [antigo, atual]):
+            aplicaveis, historicos = resolver_encerramentos(
+                [self._ativo("SKU", "Ativo", "C-1")], linhas
+            )
+            assert aplicaveis == [atual]
+            assert historicos == [antigo]
+
+    def test_ativo_sem_numero_nao_inventa_correspondencia(self):
+        encerramento = self._enc("SKU", "24/07/2026", "", "Vencido - Venda Bloqueada")
+        aplicaveis, historicos = resolver_encerramentos(
+            [self._ativo("SKU", "Ativo", "")], [encerramento]
+        )
+        assert aplicaveis == []
+        assert historicos == [encerramento]
+
+    def test_resolucao_e_derivacao_distinguem_bloqueio_atual_de_historico(self):
+        from datetime import date
+
+        from app.services.derivation import compute_status_dimensions
+
+        for cert_encerrado, status_venda, site_status in (
+            ("C-1", "BLOQUEADA", "NAO_CONFORME"),
+            ("C-0", "LIBERADA", "CONFORME"),
+        ):
+            produto = {
+                **self._ativo("SKU", "Ativo", "C-1"),
+                "last_validation_status": "OK",
+                "validade_certificado": "2027-07-24",
+            }
+            aplicaveis, _ = resolver_encerramentos(
+                [produto],
+                [self._enc("SKU", "24/07/2026", cert_encerrado, "Vencido - Venda Bloqueada")],
+            )
+            # Espelha apenas os campos de encerramento persistidos pelo sync;
+            # a situacao e o numero do cadastro continuam pertencendo a marca.
+            for encerramento in aplicaveis:
+                for campo in ("sale_deadline", "sale_deadline_date", "encerramento_status", "is_expired"):
+                    produto[campo] = encerramento[campo]
+            status = compute_status_dimensions(produto, today=date(2026, 9, 18))
+            assert status["cert_status"] == "ATIVO"
+            assert status["status_venda"] == status_venda
+            assert status["site_status"] == site_status
 
     def test_sku_sem_linha_de_produto_continua_recebendo_o_prazo(self):
         """108 SKUs Puket so existem na aba Encerramentos."""
@@ -563,6 +646,36 @@ class TestSyncSheetsToDb:
         assert not any("encerramento_status, is_expired" in s and "INSERT" in s for s in sqls)
         params = [p for c in cur.execute.call_args_list if len(c.args) > 1 for p in c.args[1]]
         assert "29/10/2026" not in params and "2026-10-29" not in params
+
+    def test_mesmo_certificado_ativo_e_encerrado_mantem_o_bloqueio_e_vira_pendencia(self, mocker):
+        """Coluna U esquecida em 'Ativo' nao pode liberar o que Encerramentos bloqueou."""
+        from app.services import erp_service
+
+        cur = self._mock_db(mocker)
+        mocker.patch.object(
+            erp_service, "_read_ativos_from_sheets",
+            return_value=[{"sku": "PI7223Y", "name": "N", "brand": "Imaginarium",
+                           "certification_type": "INMETRO", "numero_certificado": "C-1",
+                           "situacao": "Ativo", "sheet_status": "S", "ecommerce_description": "D",
+                           "validade_certificado": None, "validade_certificado_raw": ""}],
+        )
+        mocker.patch.object(
+            erp_service, "_read_encerramentos_from_sheets",
+            return_value=[{"sku": "PI7223Y", "name": "N", "brand": "Imaginarium",
+                            "numero_certificado": " c-1 ", "sale_deadline": "24/07/2026",
+                            "sale_deadline_date": "2026-07-24",
+                            "encerramento_status": "Vencido - Venda Bloqueada", "is_expired": True}],
+        )
+
+        result = erp_service.sync_sheets_to_db()
+
+        assert result["encerramentos"] == 1
+        assert result["skus_dupla_certificacao"] == 0
+        params = [p for c in cur.execute.call_args_list if len(c.args) > 1 for p in c.args[1]]
+        assert "2026-07-24" in params
+        limpeza = [c for c in cur.execute.call_args_list if "SET sale_deadline = NULL" in c.args[0]]
+        assert limpeza and "PI7223Y" in limpeza[0].args[1][0]
+        assert [p["motivo"] for p in result["pendencias"]] == [erp_service._PENDENCIA_ATIVO_E_ENCERRADO]
 
     def test_certificado_divergente_sem_linha_ativa_sincroniza_e_vira_pendencia(self, mocker):
         """050403623 (18/09/2026): situacao vazia na aba da marca e outro certificado em Encerramentos."""

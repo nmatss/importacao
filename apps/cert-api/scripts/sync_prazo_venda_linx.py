@@ -4,9 +4,9 @@ O time fiscal mantem o fim de venda na aba "Encerramentos"; o Linx guarda a trav
 de faturamento na propriedade de certificacao (00224 Puket / 00106 Imaginarium).
 Este script compara os dois e produz o relatorio antes/depois POR SKU.
 
-DRY-RUN por padrao: sem `--apply`, nada e escrito no ERP. O relatorio JSON e salvo
-em REPORTS_DIR NOS DOIS MODOS — e ele que o time fiscal confere antes de autorizar
-qualquer carga.
+DRY-RUN por padrao: nada e escrito no ERP. A preparacao concluida salva um
+relatorio JSON em REPORTS_DIR para revisao fiscal. `--apply` permanece bloqueado
+ate existir baseline, plano aprovado, conciliacao e recuperacao verificadas.
 
 Uso (no servidor):
 
@@ -36,12 +36,12 @@ from app.services.linx_service import sync_prazo_venda_to_linx  # noqa: E402
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--apply", action="store_true", help="grava de fato (sem isso, so simula)")
+    ap.add_argument("--apply", action="store_true", help="bloqueado ate aprovacao e recuperacao verificadas")
     ap.add_argument("--brand", default=None, help="limita a uma marca (ex.: puket)")
     ap.add_argument("--list", action="store_true", help="lista item a item")
     args = ap.parse_args()
 
-    modo = "APLICANDO NO LINX" if args.apply else "DRY-RUN (nada sera escrito)"
+    modo = "APPLY BLOQUEADO (nada sera escrito)" if args.apply else "DRY-RUN (nada sera escrito)"
     print(f"== Sync prazo final de venda -> Linx — {modo} ==\n")
 
     r = sync_prazo_venda_to_linx(dry_run=not args.apply, brand_filter=args.brand)
@@ -55,21 +55,24 @@ def main() -> int:
         print(f"  {acao:34} {n:4}")
 
     if r["encurta_janela"]:
-        print(
-            f"\n!! {len(r['encurta_janela'])} produto(s) em que a planilha ENCURTA a janela de venda."
-        )
+        print(f"\n!! {len(r['encurta_janela'])} produto(s) em que a planilha ENCURTA a janela de venda.")
         print("   Nao foram gravados. Precisam de decisao de negocio:")
         print(f"   {'SKU':12} {'Linx hoje':12} {'planilha':12} {'dias a menos':>12}")
         for it in sorted(r["encurta_janela"], key=lambda x: -x["dias_a_menos"])[:15]:
-            print(
-                f"   {it['sku']:12} {str(it['valor_atual']):12} {it['prazo']:12} {it['dias_a_menos']:>12}"
-            )
+            print(f"   {it['sku']:12} {str(it['valor_atual']):12} {it['prazo']:12} {it['dias_a_menos']:>12}")
 
     if r["ambiguos"]:
-        print(f"\n!! {len(r['ambiguos'])} SKU(s) com prazos divergentes entre encerramentos.")
+        print(f"\n!! {len(r['ambiguos'])} SKU(s) com prazos ou vinculos de certificado a conferir.")
         print("   Nao foram gravados — qual certificado vale e decisao de negocio:")
         for it in r["ambiguos"]:
-            print(f"   {it['sku']:12} prazos: {it['prazo']:26} certificados: {', '.join(it['certificados'])}")
+            if "certificados" in it:
+                certificados = ", ".join(it["certificados"])
+            else:
+                certificados = (
+                    f"encerramento={it.get('certificado_encerramento') or '(nao informado)'}; "
+                    f"vigente={it.get('certificado_vigente') or '(nao informado)'}"
+                )
+            print(f"   {it['sku']:12} prazos: {it['prazo']:26} certificados: {certificados}")
 
     if r["totais_por_marca"]:
         print("\nPor marca:")
@@ -89,9 +92,9 @@ def main() -> int:
     if r["report_path"]:
         print(f"\nAntes/depois de cada SKU salvo em: {r['report_path']}")
         print(f"   {len(r['diff'])} SKU(s) mudariam de valor.")
-        print("   (guarde: e o unico caminho de rollback — o Linx nao versiona PROP_PRODUTOS)")
+        print("   (evidencia de preparacao; nao substitui baseline completa nem recuperacao validada)")
     if not args.apply:
-        print("\nNada foi escrito. Para gravar de fato: --apply")
+        print("\nNada foi escrito. --apply permanece bloqueado ate aprovacao e recuperacao verificadas.")
     return 0
 
 

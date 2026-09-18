@@ -312,10 +312,17 @@ class _FakeCursor:
 
     def execute(self, sql, params=None):
         self.executed.append((" ".join(sql.split()), params or ()))
+        if sql.lstrip().startswith("INSERT"):
+            self._current = params[-1]
+        elif sql.lstrip().startswith("UPDATE"):
+            self._current = params[0]
 
     def fetchone(self):
         # Só o SELECT inicial lê; devolve None para "propriedade ausente".
         return None if self._current is None else (self._current,)
+
+    def fetchall(self):
+        return [] if self._current is None else [(1, self._current)]
 
 
 class _FakeConn:
@@ -350,7 +357,14 @@ def _fake_linx(monkeypatch, current_value):
     from app.db import sqlserver
 
     conn = _FakeConn(current_value)
-    monkeypatch.setattr(sqlserver, "_connect", lambda cfg: conn)
+    connections = []
+
+    def connect(cfg):
+        chosen = conn if not connections else _FakeConn(conn.cursor_obj._current)
+        connections.append(chosen)
+        return chosen
+
+    monkeypatch.setattr(sqlserver, "_connect", connect)
     return conn, sqlserver
 
 
@@ -377,7 +391,8 @@ def test_upsert_updates_when_value_changed(monkeypatch):
     assert action == "updated"
     update_sql, params = conn.cursor_obj.executed[-1]
     assert update_sql.startswith("UPDATE PROP_PRODUTOS SET VALOR_PROPRIEDADE")
-    assert params == ("24/04/2027", "070400034", "00224")
+    assert params == ("24/04/2027", "070400034", "00224", 1)
+    assert "AND ITEM_PROPRIEDADE = %s" in update_sql
     assert conn.committed
 
 
@@ -402,8 +417,8 @@ def test_upsert_ignores_padding_when_comparing(monkeypatch):
 
 def test_upsert_treats_null_value_as_change(monkeypatch):
     conn, sqlserver = _fake_linx(monkeypatch, current_value=None)
-    # row existe mas VALOR_PROPRIEDADE é NULL -> fetchone devolve (None,)
-    monkeypatch.setattr(conn.cursor_obj, "fetchone", lambda: (None,))
+    # Row exists but its value is NULL.
+    monkeypatch.setattr(conn.cursor_obj, "fetchall", lambda: [(1, None)])
 
     assert sqlserver.upsert_produto_propriedade("puket", "P1", "00224", "24/04/2027") == "updated"
 
@@ -414,7 +429,7 @@ def test_upsert_selects_under_lock_before_deciding(monkeypatch):
     conn, sqlserver = _fake_linx(monkeypatch, current_value=None)
     sqlserver.upsert_produto_propriedade("puket", "P1", "00224", "01/01/2027")
     first_sql, _ = conn.cursor_obj.executed[0]
-    assert first_sql.startswith("SELECT VALOR_PROPRIEDADE FROM PROP_PRODUTOS WITH (UPDLOCK, HOLDLOCK)")
+    assert first_sql.startswith("SELECT ITEM_PROPRIEDADE, VALOR_PROPRIEDADE FROM PROP_PRODUTOS WITH (UPDLOCK, HOLDLOCK)")
 
 
 def test_upsert_rolls_back_and_closes_on_failure(monkeypatch):

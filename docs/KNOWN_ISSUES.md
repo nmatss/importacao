@@ -1446,3 +1446,14 @@ Status:
 ## 12/09/2026 — Gate de segurança Node bloqueia publicação
 
 CI 34693884581, c0e9234: `npm audit --audit-level=high` falhou com 3 altas (js-yaml, multer, nodemailer) e 5 moderadas; auditoria local confirmou. Corrigir dependências e repetir gates antes do deploy já autorizado. Não houve deploy nem migration remota. Ver checkpoint final em `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`.
+
+## Preparação da release de certificação e SQL — 18/09/2026
+
+Leitura produtiva confirmou Linx desligado no container/SOPS e sync de certificação ainda em erro.
+Existe uma duplicidade da propriedade de certificação na Imaginarium que afeta um produto do
+snapshot; não corrigida automaticamente. Gravador candidato bloqueia cardinalidade inesperada e
+confirma chave/valor em outra conexão após commit. Incerteza exige reconciliação antes de retry.
+SQL Server 2022 real isolado passou; isso não comprova gravação no ERP de produção.
+Carga da planilha continua bloqueada, cinco vínculos pendentes na simulação atual. Publicação e
+ativação real seguem os gates documentados na seção 14 de
+`docs/STATUS-2026-09-18-CERTIFICACAO-SYNC-PARADO.md`. Sem mudanças nas fontes ou colunas públicas.

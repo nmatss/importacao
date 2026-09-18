@@ -64,6 +64,10 @@ Revisão 2026-09-18 (medição no Linx + regras R4/R8 da mesma reunião):
 - Licenciamento PENDENTE nunca bloqueia a venda sozinho: ~95% dos SKUs
   certificados não são licenciados e apareciam BLOQUEADOS por falta de uma data
   que nunca vai existir.
+- Encerramento do MESMO certificado identificado por
+  `encerramento_numero_certificado` rege a venda mesmo com SITUAÇÃO ainda ativa.
+  A situação da fonte é preservada; outro certificado ou identificação ausente
+  mantém a regra D11 para ativos, sem herdar prazo de certificado antigo.
 
 Sem efeitos colaterais; sem dependências externas; campos computados em runtime
 (não persiste no DB). Pode ser usado direto em routes ou em report_service.
@@ -513,6 +517,7 @@ def derive_site_status(
     certification_type: str | None,
     within_sale_deadline: bool = False,
     licenciamento_vencido: bool = False,
+    venda_bloqueada_encerramento: bool = False,
 ) -> tuple[str, str | None]:
     """Status de conformidade no e-commerce — colapsado em CONFORME | NAO_CONFORME.
 
@@ -538,6 +543,9 @@ def derive_site_status(
             ATIVO ou com a venda da certificação ainda permitida. Só data REAL
             vencida entra aqui — licenciamento PENDENTE/NAO_APLICAVEL não derruba
             o site (regras R4/R8). Default False = chamador que não conhece o eixo.
+        venda_bloqueada_encerramento: bloqueio explícito da aba Encerramentos,
+            inclusive quando a situação da aba da marca ainda está ativa.
+            Fora do site continua não havendo irregularidade de publicação.
 
     Returns:
         Tupla (status, reason). `reason` é None quando CONFORME ou quando o
@@ -576,6 +584,9 @@ def derive_site_status(
     # o estado do certificado. Fora do site não há o que corrigir.
     if licenciamento_vencido and found_on_site:
         return "NAO_CONFORME", "Licenciamento vencido com produto no site"
+
+    if venda_bloqueada_encerramento and found_on_site:
+        return "NAO_CONFORME", "Venda bloqueada em Encerramentos com produto no site"
 
     # ATIVO, ou ENCERRADO ainda dentro do prazo de comercialização (Eduarda
     # 2026-07-16, caso PI4511Y): a venda é permitida, então o site é julgado pelos
@@ -874,6 +885,19 @@ def compute_status_dimensions(
         situacao,
         somente_encerramentos,
     )
+    certificado = re.sub(r"\s+", "", str(row.get("numero_certificado") or "")).upper()
+    certificado_encerrado = re.sub(
+        r"\s+", "", str(row.get("encerramento_numero_certificado") or "")
+    ).upper()
+    encerramento_do_ativo = (
+        derive_situacao_status(situacao) == "ATIVO"
+        and bool(certificado)
+        and certificado == certificado_encerrado
+    )
+    # A identidade persistida permite distinguir o encerramento vigente de um
+    # prazo residual do certificado antigo. Só o eixo comercial usa ENCERRADO;
+    # `cert_status` continua refletindo a situação original da aba da marca.
+    cert_status_comercial = "ENCERRADO" if encerramento_do_ativo else cs
     within_deadline = derive_within_sale_deadline(
         sheet_status,
         sale_deadline_raw,
@@ -896,9 +920,11 @@ def compute_status_dimensions(
     )
     # O site precisa enxergar a trava de licenciamento: sem isto, licença vencida
     # dava status_venda=BLOQUEADA com site_status=CONFORME na mesma linha.
+    venda = derive_venda_encerramento(encerramento_status)
     ss, ss_reason = derive_site_status(
-        last_vs, cs, expected_cert_text, certification_type, within_deadline,
+        last_vs, cert_status_comercial, expected_cert_text, certification_type, within_deadline,
         licenciamento_vencido=ls == "VENCIDO",
+        venda_bloqueada_encerramento=venda == "BLOQUEADA",
     )
     cert_reason = None
     validade = parse_data_real(row.get("validade_certificado"))
@@ -913,11 +939,10 @@ def compute_status_dimensions(
     ):
         cert_reason = "Situacao da certificacao nao informada; confirmar vinculo vigente"
     cms = derive_comercializacao_status(
-        cs, sale_deadline_raw, sheet_status, within_deadline, encerramento_status
+        cert_status_comercial, sale_deadline_raw, sheet_status, within_deadline, encerramento_status
     )
-    venda = derive_venda_encerramento(encerramento_status)
     trava, trava_origem = derive_trava_venda(
-        row.get("sale_deadline_date") or sale_deadline_raw, fim_licenciamento, cs
+        row.get("sale_deadline_date") or sale_deadline_raw, fim_licenciamento, cert_status_comercial
     )
     # O componente de CERTIFICAÇÃO sozinho, e não a trava (que é o mínimo com o
     # licenciamento): encerrado sem prazo final de venda conhecido não pode sair
@@ -927,7 +952,7 @@ def compute_status_dimensions(
         parse_data_real(row.get("sale_deadline_date")) or parse_data_real(sale_deadline_raw)
     ) is not None
     status_venda = derive_status_venda(
-        cs, trava, venda, within_deadline, today, prazo_certificacao_conhecido
+        cert_status_comercial, trava, venda, within_deadline, today, prazo_certificacao_conhecido
     )
     venda_reason = None
     # Licenciamento PENDENTE (Linx não lido, ou licenciado sem data) NÃO bloqueia
@@ -940,6 +965,8 @@ def compute_status_dimensions(
     if cert_reason:
         status_venda = "BLOQUEADA"
         venda_reason = cert_reason
+    elif encerramento_do_ativo and not prazo_certificacao_conhecido and not within_deadline:
+        venda_reason = "Mesmo certificado ativo e encerrado sem prazo de venda; confirmar com Certificacao"
     exclusao_vigente = _is_sku_excluded(situacao) or (
         derive_situacao_status(situacao) is None and _is_sku_excluded(sheet_status)
     )

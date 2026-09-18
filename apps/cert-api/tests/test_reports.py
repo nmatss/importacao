@@ -200,6 +200,38 @@ def test_generated_xlsx_neutralizes_formula_like_text(mocker, tmp_path):
     assert cell("Situacao da Venda") == "'@Comerciacao Permitida"
 
 
+@pytest.mark.parametrize("closure_certificate, expected_sale", [
+    ("CERT-CURRENT", "Bloqueada"), ("INTERNAL-OLD", "Liberada"),
+])
+def test_products_report_uses_internal_provenance_without_changing_columns(
+    mocker, tmp_path, closure_certificate, expected_sale,
+):
+    _patch_products_report_io(mocker, tmp_path)
+    product = {
+        "sku": "SYNTHETIC-PROVENANCE", "brand": "Puket", "situacao": "ATIVO",
+        "numero_certificado": "CERT-CURRENT", "sale_deadline_date": date(2026, 1, 1),
+        "is_expired": True, "last_validation_status": "OK", "licenciamento_aplicavel": False,
+    }
+    baseline = openpyxl.load_workbook(generate_products_report([product], today=date(2026, 9, 18)))
+    baseline_headers = [cell.value for cell in baseline["Produtos"][7]]
+    baseline.close()
+
+    product["encerramento_numero_certificado"] = closure_certificate
+    workbook = openpyxl.load_workbook(generate_products_report([product], today=date(2026, 9, 18)))
+    sheet = workbook["Produtos"]
+
+    assert [cell.value for cell in sheet[7]] == baseline_headers
+    assert sheet.max_column == 29
+    assert sheet.cell(8, _header_index(sheet, "Status Certificacao")).value == "Ativo"
+    assert sheet.cell(8, _header_index(sheet, "Status de Venda")).value == expected_sale
+    assert sheet.cell(8, _header_index(sheet, "Numero Certificado")).value == "CERT-CURRENT"
+    assert all(
+        cell.value not in ("encerramento_numero_certificado", "INTERNAL-OLD")
+        for row in sheet for cell in row
+    )
+    workbook.close()
+
+
 def test_products_report_mirrors_panel_status_columns(mocker, tmp_path):
     """O Excel tem de trazer os MESMOS tres status do painel, nao o status cru."""
     _patch_products_report_io(

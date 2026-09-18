@@ -952,6 +952,44 @@ describe('CertCadastroPage — carga em lote SKU;data', () => {
     expect(mockedLink).not.toHaveBeenCalled();
   });
 
+  it('resume o resultado parcial pelas linhas executadas, sem contar falha como gravacao', async () => {
+    const user = userEvent.setup();
+    const preview = batchResult();
+    mockedBatch.mockResolvedValueOnce(preview);
+    mockedBatch.mockResolvedValueOnce(
+      batchResult({
+        dry_run: false,
+        total_linhas: 4,
+        // O resumo da API descreve as acoes planejadas, mesmo se o vinculo falhar.
+        resumo: { vincular: 1, vincular_e_encerrar: 0, encerrar: 1, sem_alteracao: 2, erro: 0 },
+        linhas: [
+          { ...preview.linhas[0], status: 'aplicado' },
+          { ...preview.linhas[1], status: 'falhou', mensagem: 'SKU nao encontrado no Linx' },
+          { ...preview.linhas[0], linha: 3, acao: 'sem_alteracao', status: 'aplicado' },
+          { ...preview.linhas[0], linha: 4, acao: 'sem_alteracao', status: 'ignorada' },
+        ],
+      }),
+    );
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+    const previewLabel = await screen.findByText('Prévia do lote:');
+    expect(previewLabel.closest('p')).toHaveTextContent(
+      '1 a encerrar · 1 a vincular · 0 sem alteração · 0 com erro',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar lote' }));
+
+    const resultLabel = await screen.findByText('Resultado do lote:');
+    expect(resultLabel.closest('p')).toHaveTextContent(
+      '1 gravada(s) no portal · 1 sem alteração · 1 ignorada(s) · 1 com falha',
+    );
+    expect(
+      screen.queryByText(/Nada será gravado enquanto houver linha com erro/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+  });
+
   it('mostra o erro do servidor quando a prévia falha', async () => {
     const user = userEvent.setup();
     mockedBatch.mockRejectedValue(new Error('Erro na API: Envie no maximo 500 linhas por vez'));

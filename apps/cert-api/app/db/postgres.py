@@ -309,6 +309,7 @@ def verify_item_restriction_schema() -> None:
             cur.execute("SELECT situacao, fim_venda, restriction_updated_at, restriction_updated_by FROM cert_certificate_items WHERE false")
             cur.execute("SELECT started_at, finished_at, trigger, actor, result, error FROM cert_sync_runs WHERE false")
             cur.execute("SELECT validade_certificado, validade_certificado_raw, status_venda, trava_venda, trava_origem, linx_fim_licenciamento, linx_prop_certificacao, linx_fim_vendas, grife, linx_synced_at FROM cert_products WHERE false")
+            cur.execute("SELECT encerramento_numero_certificado FROM cert_products WHERE false")
             cur.execute("SELECT situacao, fim_venda FROM cert_certificates WHERE false")
             cur.execute("""SELECT indexrelid::regclass::text AS name FROM pg_index
                 WHERE indisvalid AND indexrelid IN (
@@ -329,7 +330,7 @@ def verify_item_restriction_schema() -> None:
     except Exception:
         raise RuntimeError(
             "Schema de restricao individual indisponivel: aplicar e verificar explicitamente "
-            "sql/20260912_certificate_item_restrictions.sql antes de iniciar cert-api"
+            "as migrations de release (python -m app.db.release_migrations --apply) antes de iniciar cert-api"
         ) from None
 
 

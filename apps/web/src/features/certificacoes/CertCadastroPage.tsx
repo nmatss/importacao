@@ -1406,10 +1406,37 @@ export default function CertCadastroPage() {
                       <strong>
                         {batchPreview.dry_run ? 'Prévia do lote' : 'Resultado do lote'}:
                       </strong>{' '}
-                      {batchPreview.resumo.encerrar} a encerrar ·{' '}
-                      {batchPreview.resumo.vincular + batchPreview.resumo.vincular_e_encerrar} a
-                      vincular · {batchPreview.resumo.sem_alteracao} sem alteração ·{' '}
-                      {batchPreview.resumo.erro} com erro
+                      {batchPreview.dry_run ? (
+                        <>
+                          {batchPreview.resumo.encerrar} a encerrar ·{' '}
+                          {batchPreview.resumo.vincular + batchPreview.resumo.vincular_e_encerrar} a
+                          vincular · {batchPreview.resumo.sem_alteracao} sem alteração ·{' '}
+                          {batchPreview.resumo.erro} com erro
+                        </>
+                      ) : (
+                        <>
+                          {
+                            batchPreview.linhas.filter(
+                              (line) => line.status === 'aplicado' && line.acao !== 'sem_alteracao',
+                            ).length
+                          }{' '}
+                          gravada(s) no portal ·{' '}
+                          {
+                            batchPreview.linhas.filter(
+                              (line) => line.status === 'aplicado' && line.acao === 'sem_alteracao',
+                            ).length
+                          }{' '}
+                          sem alteração ·{' '}
+                          {batchPreview.linhas.filter((line) => line.status === 'ignorada').length}{' '}
+                          ignorada(s) ·{' '}
+                          {
+                            batchPreview.linhas.filter(
+                              (line) => line.status === 'falhou' || line.status === 'erro',
+                            ).length
+                          }{' '}
+                          com falha
+                        </>
+                      )}
                     </p>
                     {!batchPreview.valid && (
                       <p className="flex items-start gap-1.5 font-medium text-danger-700 dark:text-danger-300">

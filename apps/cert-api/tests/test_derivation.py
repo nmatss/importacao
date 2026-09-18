@@ -1416,6 +1416,135 @@ class TestSiteStatusEnxergaOLicenciamentoVencido:
         ) == ("CONFORME", None)
 
 
+class TestSiteStatusEnxergaBloqueioExplicito:
+    @pytest.mark.parametrize(
+        ("validacao", "site_esperado"),
+        [("OK", "NAO_CONFORME"), ("URL_NOT_FOUND", "CONFORME")],
+    )
+    def test_ativo_com_venda_bloqueada_respeita_presenca_no_site(self, validacao, site_esperado):
+        row = {
+            "situacao": "Ativo",
+            "numero_certificado": "C-1",
+            "encerramento_status": "Vencido - Venda Bloqueada",
+            "sale_deadline_date": date(2026, 7, 24),
+            "validade_certificado": date(2027, 7, 24),
+            "last_validation_status": validacao,
+            "grife": "PUKET",
+            "linx_synced_at": datetime(2026, 9, 18, 6, 0),
+        }
+        dims = compute_status_dimensions(row, today=date(2026, 9, 18))
+
+        assert row["situacao"] == "Ativo"
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["license_status"] == "NAO_APLICAVEL"
+        assert dims["site_status"] == site_esperado
+        if site_esperado == "NAO_CONFORME":
+            assert "Venda bloqueada" in dims["site_status_reason"]
+        else:
+            assert dims["site_status_reason"] is None
+
+
+class TestEncerramentoDoMesmoCertificadoAtivo:
+    HOJE = date(2026, 9, 18)
+
+    def _row(self, **overrides):
+        row = {
+            "situacao": "Ativo",
+            "numero_certificado": "C-1",
+            "encerramento_numero_certificado": " c - 1 ",
+            "encerramento_status": "",
+            "sale_deadline_date": date(2026, 7, 24),
+            "validade_certificado": date(2027, 7, 24),
+            "last_validation_status": "OK",
+            "grife": "PUKET",
+            "linx_synced_at": datetime(2026, 9, 18, 6, 0),
+        }
+        row.update(overrides)
+        return row
+
+    @pytest.mark.parametrize("status", ["", "Comerciação Permitida"])
+    def test_prazo_vencido_bloqueia_mesmo_se_status_permite(self, status):
+        row = self._row(encerramento_status=status)
+        dims = compute_status_dimensions(row, today=self.HOJE)
+        assert row["situacao"] == "Ativo"
+        assert row["numero_certificado"] == "C-1"
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["trava_venda"] == "2026-07-24"
+        assert dims["trava_origem"] == "certificacao"
+        assert dims["site_status"] == "NAO_CONFORME"
+        assert dims["comercializacao_status"] == "ENCERRADA"
+
+    @pytest.mark.parametrize("prazo", [date(2026, 9, 18), date(2026, 9, 19)])
+    def test_prazo_hoje_ou_futuro_permite_vender(self, prazo):
+        dims = compute_status_dimensions(self._row(sale_deadline_date=prazo), today=self.HOJE)
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] == prazo.isoformat()
+        assert dims["site_status"] == "CONFORME"
+        assert dims["comercializacao_status"] == "DENTRO_PRAZO"
+
+    @pytest.mark.parametrize("licenca", [None, date(2027, 1, 1)])
+    def test_sem_prazo_ou_permissao_exige_conferencia(self, licenca):
+        dims = compute_status_dimensions(
+            self._row(sale_deadline_date=None, linx_fim_licenciamento=licenca), today=self.HOJE
+        )
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["status_venda_reason"]
+        assert dims["comercializacao_status"] == "PENDENTE"
+        assert dims["site_status"] == "NAO_CONFORME"
+
+    @pytest.mark.parametrize("status", ["Comerciação Permitida", "Venda até fim do lote"])
+    def test_veredito_permissivo_sem_data_continua_valendo(self, status):
+        dims = compute_status_dimensions(
+            self._row(sale_deadline_date=None, encerramento_status=status), today=self.HOJE
+        )
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["site_status"] == "CONFORME"
+        assert dims["comercializacao_status"] == "DENTRO_PRAZO"
+
+    def test_licenca_menor_prevalece(self):
+        dims = compute_status_dimensions(
+            self._row(sale_deadline_date=date(2026, 10, 1), linx_fim_licenciamento=date(2026, 9, 17)),
+            today=self.HOJE,
+        )
+        assert dims["trava_venda"] == "2026-09-17"
+        assert dims["trava_origem"] == "licenciamento"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["site_status"] == "NAO_CONFORME"
+
+    @pytest.mark.parametrize("certificado", ["ANTIGO", None, "", "   "])
+    def test_certificado_diferente_ou_nao_identificado_preserva_d11(self, certificado):
+        dims = compute_status_dimensions(
+            self._row(encerramento_numero_certificado=certificado), today=self.HOJE
+        )
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] is None
+        assert dims["site_status"] == "CONFORME"
+
+    def test_row_legado_sem_coluna_preserva_d11(self):
+        row = self._row()
+        del row["encerramento_numero_certificado"]
+        dims = compute_status_dimensions(row, today=self.HOJE)
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] is None
+
+    def test_numeros_vazios_nao_identificam_mesmo_certificado(self):
+        dims = compute_status_dimensions(
+            self._row(numero_certificado=" ", encerramento_numero_certificado=""), today=self.HOJE
+        )
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] is None
+
+    def test_fora_do_site_continua_conforme_mesmo_com_venda_bloqueada(self):
+        dims = compute_status_dimensions(self._row(last_validation_status="URL_NOT_FOUND"), today=self.HOJE)
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["site_status"] == "CONFORME"
+        assert dims["site_status_reason"] is None
+
+
 class TestSituacaoToleraDigitacao:
     """A coluna U e digitada a mao: ponto final, espaco e caixa nao mudam o status.
 

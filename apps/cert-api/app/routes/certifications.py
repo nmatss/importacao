@@ -79,6 +79,9 @@ def _serialize_product(r: dict, license_map: dict | None = None) -> dict:
         if r.get(dtfield):
             r[dtfield] = r[dtfield].isoformat() if hasattr(r[dtfield], "isoformat") else str(r[dtfield])
     r.update(compute_status_dimensions(r, license_map))
+    # A origem do encerramento alimenta a derivacao, mas nao integra o contrato
+    # publico de produtos nem acrescenta um campo a tela.
+    r.pop("encerramento_numero_certificado", None)
     return r
 
 

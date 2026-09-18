@@ -22,12 +22,43 @@ def test_release_apply_checks_after_explicit_sql(mocker):
     context = mocker.MagicMock()
     context.__enter__.return_value = (mocker.MagicMock(), mocker.MagicMock())
     context.__enter__.return_value[1].execute.side_effect = lambda sql: events.append(
-        "restriction" if "BEGIN;" in sql else "unexpected"
+        "provenance" if "encerramento_numero_certificado" in sql else "restriction"
     )
     mocker.patch.object(release, "db", return_value=context)
     mocker.patch.object(release, "verify_item_restriction_schema", side_effect=lambda: events.append("check"))
     release.apply_release_migrations()
-    assert events == ["base", "restriction", "check"]
+    assert events == ["base", "restriction", "provenance", "check"]
+
+
+def test_missing_migration_artifact_does_not_start_ddl(mocker, tmp_path):
+    mocker.patch.object(release, "ENCERRAMENTO_MIGRATION", tmp_path / "missing.sql")
+    base = mocker.patch.object(release, "ensure_tables")
+    database = mocker.patch.object(release, "db")
+    with pytest.raises(FileNotFoundError):
+        release.apply_release_migrations()
+    base.assert_not_called()
+    database.assert_not_called()
+
+
+def test_readiness_refuses_missing_provenance_without_running_ddl(mocker):
+    from app.db import postgres
+
+    context = mocker.MagicMock()
+    cur = mocker.MagicMock()
+    context.__enter__.return_value = (mocker.MagicMock(), cur)
+    statements = []
+
+    def execute(sql):
+        statements.append(sql)
+        if "encerramento_numero_certificado" in sql:
+            raise RuntimeError("private database detail")
+
+    cur.execute.side_effect = execute
+    mocker.patch.object(postgres, "db", return_value=context)
+    with pytest.raises(RuntimeError, match="migrations de release") as exc:
+        postgres.verify_item_restriction_schema()
+    assert "private database" not in str(exc.value)
+    assert statements and all(sql.lstrip().startswith("SELECT") for sql in statements)
 
 
 def test_release_failure_exits_nonzero_without_printing_database_error(mocker, capsys):

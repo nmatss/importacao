@@ -9,7 +9,7 @@ import unittest
 SCRIPT = Path(__file__).with_name('deploy.sh').resolve()
 
 class ReleaseTests(unittest.TestCase):
-    def run_release(self, fail=''):
+    def run_release(self, fail='', expected_linx=None):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / 'scripts').mkdir()
@@ -25,8 +25,22 @@ case "$*" in
 esac
 ''',
                 'rsync': '#!/bin/sh\necho local-rsync >> "$TRACE"\n',
+                'docker': '''#!/usr/bin/env python3
+import json,os,sys
+fail=os.environ.get('FAIL_POINT','')
+if fail=='linx-compose':
+    print('SYNTHETIC_PRIVATE_CONFIG',file=sys.stderr)
+    sys.exit(1)
+if fail=='linx-json':
+    print('SYNTHETIC_PRIVATE_CONFIG invalid json')
+    sys.exit(0)
+environment={'LINX_WRITE_ENABLED': 'true' if fail=='linx-enabled' else 'false',
+             'DATABASE_URL':'SYNTHETIC_PRIVATE_CONFIG'}
+if fail=='linx-missing': environment.pop('LINX_WRITE_ENABLED')
+print(json.dumps({'services':{'cert-api':{'environment':environment}}}))
+''',
                 'ssh': '''#!/usr/bin/env python3
-import os,sys
+import os,sys,subprocess,shlex
 from pathlib import Path
 cmd=' '.join(sys.argv[1:])
 with open(os.environ['TRACE'],'a') as f: f.write(cmd+'\\n')
@@ -34,6 +48,9 @@ fail=os.environ.get('FAIL_POINT','')
 state=Path(os.environ['TRACE']+'.restored')
 if 'rsync -a --delete' in cmd: state.touch()
 if "awk -F=" in cmd: print('false')
+if "python3 - 'docker-compose.prod.yml'" in cmd:
+    args=shlex.split(cmd.split('python3 ',1)[1])
+    sys.exit(subprocess.run(['python3',*args],input=sys.stdin.read(),text=True).returncode)
 if fail=='snapshot' and 'cp -al' in cmd: sys.exit(1)
 if fail=='ssh-inspection' and 'test -d ' in cmd: sys.exit(255)
 if fail=='build' and ' build api web cert-api' in cmd: sys.exit(1)
@@ -51,6 +68,9 @@ if not state.exists():
             env = dict(os.environ, PATH=str(binary)+os.pathsep+os.environ['PATH'],
                        TRACE=str(root/'trace'), FAIL_POINT=fail, HEALTH_RETRIES='1', HEALTH_INTERVAL='0',
                        GOOGLE_CHAT_WEBHOOK_URL='', PUBLIC_WEB_HEALTH_ENDPOINT='', SKIP_BACKUP='0')
+            env.pop('EXPECTED_LINX_WRITE_ENABLED', None)
+            if expected_linx is not None:
+                env['EXPECTED_LINX_WRITE_ENABLED'] = expected_linx
             result = subprocess.run(['bash','scripts/deploy.sh'], input='y\n', text=True,
                                     capture_output=True, cwd=root, env=env, timeout=20)
             return result, (root/'trace').read_text()
@@ -61,6 +81,10 @@ if not state.exists():
         self.assertLess(trace.index('backup'), trace.index('local-rsync'))
         self.assertLess(trace.index(' build api web cert-api'), trace.index('apply-pending-migrations.sh'))
         self.assertLess(trace.index('release_migrations --apply'), trace.index(' up -d --no-deps api web cert-api'))
+        self.assertLess(trace.index('generate-env-from-vault.sh --sops'), trace.index("python3 - 'docker-compose.prod.yml'"))
+        self.assertLess(trace.index("python3 - 'docker-compose.prod.yml'"), trace.index('apply-pending-migrations.sh'))
+        self.assertIn('Effective Linx write flag matches', result.stdout)
+        self.assertNotIn('SYNTHETIC_PRIVATE_CONFIG', result.stdout+result.stderr)
         self.assertIn('/api/ready', trace)
         self.assertIn('8085/api/health', trace)
         self.assertNotIn('rm -rf /home/nicolas/importacao.rollback\n', trace) # no post-success removal
@@ -69,6 +93,25 @@ if not state.exists():
         result, trace = self.run_release('snapshot')
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn('local-rsync', trace)
+
+    def test_unexpected_linx_write_or_unreadable_flag_blocks_before_schema_mutations(self):
+        for failure in ['linx-enabled', 'linx-json', 'linx-compose', 'linx-missing']:
+            with self.subTest(failure=failure):
+                result, trace = self.run_release(failure)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('Linx write verification failed', result.stdout)
+                self.assertNotIn('apply-pending-migrations.sh', trace)
+                self.assertNotIn('release_migrations --apply', trace)
+                self.assertNotIn(' up -d', trace)
+                self.assertNotIn('SYNTHETIC_PRIVATE_CONFIG', result.stdout+result.stderr)
+
+    def test_explicit_linx_expectation_is_compared_without_changing_configuration(self):
+        result, trace = self.run_release('linx-enabled', expected_linx='true')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn("python3 - 'docker-compose.prod.yml' 'true'", trace)
+        result, trace = self.run_release(expected_linx='true')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('apply-pending-migrations.sh', trace)
 
     def test_failed_ssh_inspection_is_not_first_deploy(self):
         result, trace = self.run_release('ssh-inspection')

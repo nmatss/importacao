@@ -326,6 +326,14 @@ def read_produto_propriedade(brand: str, produto_codigo: str, prop_code: str) ->
         return "" if row[0] is None else str(row[0]).strip()
 
 
+class LinxReconciliationRequiredError(RuntimeError):
+    """Commit attempted; reconcile ERP state before any subsequent write."""
+
+
+class LinxPropertyCardinalityError(RuntimeError):
+    """Property is not a single value at the expected item key."""
+
+
 def upsert_produto_propriedade(
     brand: str, produto_codigo: str, prop_code: str, valor: str
 ) -> str:
@@ -339,9 +347,9 @@ def upsert_produto_propriedade(
     The INSERT must supply ITEM_PROPRIEDADE: it is the third column of the PK and is
     smallint NOT NULL with no default in both databases, so omitting it fails every
     time the product doesn't have the property yet (the exact path a first-time
-    certificate registration takes). It is the property's multi-value index; the four
-    certification properties are single-valued and use item=1 across every existing
-    row, which is why matching on (produto, propriedade) alone is unambiguous here.
+    certificate registration takes). It is the property's multi-value index.
+    Under lock we require at most one row, at the configured item key; UPDATE
+    and post-commit verification use the complete primary key.
 
     Skipping the no-op write is not just tidiness: PROP_PRODUTOS carries an active
     trigger on Puket (LXU_PROP_PRODUTOS), so rewriting an identical value would fire
@@ -354,10 +362,14 @@ def upsert_produto_propriedade(
         valor: Value to store (e.g. the formatted date string).
 
     Returns:
-        'inserted', 'updated' or 'unchanged'.
+        'inserted', 'updated' or 'unchanged', only after an independent connection
+        confirms the committed value. This does not verify downstream ERP effects.
 
     Raises:
-        Exception: On connection/query failure (transaction is rolled back).
+        LinxPropertyCardinalityError: Unexpected item/multiple values; no write.
+        LinxReconciliationRequiredError: Commit or its subsequent verification is
+            uncertain. No automatic retry or claim of rollback is safe.
+        Exception: Pre-commit failure; the local transaction is rolled back.
     """
     cfg = _brand_linx(brand)
     table = _ident(LINX_SCHEMA["prop_table"])
@@ -368,42 +380,75 @@ def upsert_produto_propriedade(
     item_value = int(LINX_SCHEMA["prop_item_value"])
 
     conn = _connect(cfg)
+    commit_attempted = False
     try:
         cur = conn.cursor()
         # UPDLOCK+HOLDLOCK serialize the "row absent" case so two concurrent upserts
         # for the same (produto, propriedade) can't both fall through to INSERT.
         cur.execute(
-            f"SELECT {col_val} FROM {table} WITH (UPDLOCK, HOLDLOCK) "  # noqa: S608
+            f"SELECT {col_item}, {col_val} FROM {table} WITH (UPDLOCK, HOLDLOCK) "  # noqa: S608
             f"WHERE {col_prod} = %s AND {col_prop} = %s",
             (produto_codigo, prop_code),
         )
-        row = cur.fetchone()
+        rows = cur.fetchall()
+        if len(rows) > 1 or (rows and rows[0][0] != item_value):
+            raise LinxPropertyCardinalityError("Propriedade Linx com cardinalidade ou item inesperado")
 
-        if row is None:
+        if not rows:
             cur.execute(
                 f"INSERT INTO {table} ({col_prod}, {col_prop}, {col_item}, {col_val}) "  # noqa: S608
                 f"VALUES (%s, %s, %s, %s)",
                 (produto_codigo, prop_code, item_value, valor),
             )
-            conn.commit()
-            return "inserted"
-
-        # VALOR_PROPRIEDADE is a padded text column — compare trimmed, or every
-        # write would look like a change.
-        current = "" if row[0] is None else str(row[0]).strip()
-        if current == valor.strip():
-            conn.commit()  # nothing to write; just release the lock
-            return "unchanged"
-
-        cur.execute(
-            f"UPDATE {table} SET {col_val} = %s "  # noqa: S608
-            f"WHERE {col_prod} = %s AND {col_prop} = %s",
-            (valor, produto_codigo, prop_code),
-        )
+            action = "inserted"
+        else:
+            # Ignore padding so an unchanged value does not fire ERP triggers.
+            current = "" if rows[0][1] is None else str(rows[0][1]).strip()
+            action = "unchanged"
+            if current != valor.strip():
+                cur.execute(
+                    f"UPDATE {table} SET {col_val} = %s "  # noqa: S608
+                    f"WHERE {col_prod} = %s AND {col_prop} = %s AND {col_item} = %s",
+                    (valor, produto_codigo, prop_code, item_value),
+                )
+                action = "updated"
+        # A commit timeout can occur after the server committed. Do not report
+        # rollback or retry as safe once this boundary has been crossed.
+        commit_attempted = True
         conn.commit()
-        return "updated"
     except Exception:
+        if commit_attempted:
+            raise LinxReconciliationRequiredError("Confirmacao do commit Linx indisponivel; reconciliar antes de reenviar") from None
         conn.rollback()
         raise
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            if commit_attempted:
+                raise LinxReconciliationRequiredError("Estado Linx requer reconciliacao antes de reenviar") from None
+            raise
+
+    # A separate connection proves visibility after commit, not just the value
+    # staged in the writing transaction. Never write again on a read-back failure.
+    verification = None
+    try:
+        verification = _connect(cfg)
+        cur = verification.cursor()
+        cur.execute(
+            f"SELECT {col_item}, {col_val} FROM {table} "  # noqa: S608
+            f"WHERE {col_prod} = %s AND {col_prop} = %s AND {col_item} = %s",
+            (produto_codigo, prop_code, item_value),
+        )
+        rows = cur.fetchall()
+        if len(rows) != 1 or rows[0][0] != item_value or str(rows[0][1] or "").strip() != valor.strip():
+            raise LinxReconciliationRequiredError("Valor final Linx divergente; reconciliar antes de reenviar")
+    except Exception:
+        raise LinxReconciliationRequiredError("Valor final Linx nao confirmado; reconciliar antes de reenviar") from None
+    finally:
+        if verification is not None:
+            try:
+                verification.close()
+            except Exception:
+                raise LinxReconciliationRequiredError("Confirmacao Linx incompleta; reconciliar antes de reenviar") from None
+    return action

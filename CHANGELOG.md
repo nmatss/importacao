@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-09-18 — Retomada da certificação (local, não implantada)
+
+- Fortalece escrita Linx: bloqueia cardinalidade inesperada, atualiza pela chave completa e
+  confirma o valor em nova conexão após commit; incerteza exige reconciliação antes de reenviar.
+- Deploy confere a flag Linx efetiva após SOPS e aborta antes das migrations se divergir da
+  expectativa autorizada (padrão desligado), sem imprimir configuração ou credenciais.
+
+- Auditoria de parâmetros confirma fim de venda como único valor da propriedade de certificação
+  Linx. Preserva encerramento identificado sem prazo/status para não liberar item indevidamente;
+  corrige apresentação de ambiguidades e aviso de apply bloqueado na CLI de preparação.
+- Adiciona proveniência interna do certificado encerrado por migration explícita e idempotente.
+  Encerramento vencido do mesmo certificado bloqueia venda mesmo com STATUS vazio/permissivo,
+  preservando a situação da fonte, a API pública e as 29 colunas do relatório. PostgreSQL isolado
+  valida reaplicação, dados legados, gravação, limpeza e rollback transacional.
+- Preserva encerramento do mesmo certificado ativo e expõe a contradição como pendência do sync.
+- Produto no site com bloqueio explícito em Encerramentos passa a Não conforme.
+- Resultado da carga em lote distingue linhas gravadas e falhas efetivas, preservando a prévia.
+- Isola Poppler no teste de resiliência com fake timers; suíte API volta a passar sem alteração runtime.
+- Colunas de relatório e fontes preservadas. Evidências e condições de ativação em
+  `docs/STATUS-2026-09-18-CERTIFICACAO-SYNC-PARADO.md`, seção 12; seção 11 preserva a revisão anterior.
+
 ## 2026-09-16 — Grupo Portal Importacao e dominio imaginarium.com.br
 
 - `GOOGLE_GROUP_ALLOWED` aceita lista. Producao `6cbb9c2`:

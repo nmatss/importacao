@@ -79,6 +79,9 @@ _PENDENCIA_VINCULO = "mais de um fornecedor/certificado para o mesmo SKU"
 _PENDENCIA_CERTIFICADO_DIVERGENTE = (
     "certificado da aba da marca difere do de Encerramentos e nao ha linha ativa"
 )
+_PENDENCIA_ATIVO_E_ENCERRADO = (
+    "aba da marca diz Ativo e Encerramentos encerra o mesmo certificado"
+)
 # Teto de SKUs nomeados numa mensagem de erro e de pendencias gravadas no
 # `result` do sync (jsonb de `cert_sync_runs`).
 _MAX_SKUS_NA_MENSAGEM = 20
@@ -474,7 +477,9 @@ def _read_encerramentos_from_sheets(
     "Vencido - Venda Bloqueada" / "Venda ate fim do lote"). A leitura antiga
     exigia data no prazo e por isso DESCARTAVA as 28 linhas que so tem o
     status — entre elas PI7560Y, que aparecia no painel como Encerrado / Nao
-    conforme sem ter prazo nenhum. Agora basta prazo OU status.
+    conforme sem ter prazo nenhum. Basta prazo, status OU certificado identificado:
+    mesmo sem prazo/status, o encerramento identificado precisa chegar ao resolver
+    e a derivacao para sinalizar pendencia, sem liberar o SKU pela limpeza.
 
     Returns:
         Lista de dicts de encerramento, um por SKU.
@@ -540,7 +545,8 @@ def _read_encerramentos_from_sheets(
             continue
         prazo_str = _cell(row, i_prazo)
         status_str = _cell(row, i_status)
-        if not prazo_str and not status_str:
+        certificado_str = _cell(row, i_cert)
+        if not prazo_str and not status_str and not certificado_str:
             continue
 
         prazo_date = parse_data_real(prazo_str)
@@ -564,7 +570,7 @@ def _read_encerramentos_from_sheets(
                 "sku": sku,
                 "name": _cell(row, i_nome),
                 "brand": _canonical_brand(_cell(row, i_marca)),
-                "numero_certificado": _cell(row, i_cert),
+                "numero_certificado": certificado_str,
                 "sale_deadline": prazo_str,
                 "sale_deadline_date": prazo_date.isoformat() if prazo_date else None,
                 "encerramento_status": status_str,
@@ -594,8 +600,9 @@ def resolver_encerramentos(
     trava de um certificado vivo.
 
     Regras (decisao D11):
-    - SKU com linha vigente U='Ativo': o encerramento e HISTORICO. Nao aplica
-      prazo nem vencimento (o `_CLEAR_ENCERRAMENTOS_SQL` limpa o que houver).
+    - SKU com linha vigente U='Ativo': encerramento de OUTRO certificado e
+      historico; o `_CLEAR_ENCERRAMENTOS_SQL` limpa o prazo antigo. Encerramento
+      do MESMO certificado e preservado e sinalizado como pendencia no sync.
     - SKU sem linha ativa: o encerramento vale. Havendo mais de uma linha,
       prefere a do MESMO certificado da linha de produto (col. A = col. P); sem
       casar, mantem a ultima (comportamento anterior).
@@ -619,7 +626,18 @@ def resolver_encerramentos(
     for sku, linhas in por_sku.items():
         vigente = vigente_por_sku.get(sku)
         if vigente and derive_situacao_status(vigente.get("situacao")) == "ATIVO":
-            historicos.extend(linhas)
+            # Historico e o encerramento de OUTRO certificado. Se "Encerramentos"
+            # encerra o MESMO certificado que a aba da marca ainda diz 'Ativo', as
+            # duas abas se contradizem (coluna U nao atualizada): descartar a linha
+            # a tiraria da lista protegida da limpeza e o item de venda bloqueada
+            # sairia liberado. Vale o encerramento; o sync lista a pendencia.
+            cert_vigente = _norm_certificado(vigente.get("numero_certificado"))
+            mesmo_certificado = [
+                ln for ln in linhas if cert_vigente and _norm_certificado(ln.get("numero_certificado")) == cert_vigente
+            ]
+            if mesmo_certificado:
+                aplicaveis.append(mesmo_certificado[-1])
+            historicos.extend(ln for ln in linhas if not mesmo_certificado or ln is not mesmo_certificado[-1])
             continue
         escolhida = linhas[-1]
         if vigente and len(linhas) > 1:
@@ -679,8 +697,8 @@ _UPSERT_ATIVOS_SQL = """
 _UPSERT_ENCERRAMENTOS_SQL = """
     INSERT INTO cert_products
         (sku, name, brand, numero_certificado, sale_deadline, sale_deadline_date,
-         encerramento_status, is_expired, updated_at)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+         encerramento_status, is_expired, encerramento_numero_certificado, updated_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
     ON CONFLICT (sku) DO UPDATE SET
         name = COALESCE(NULLIF(cert_products.name, ''), EXCLUDED.name),
         brand = COALESCE(NULLIF(cert_products.brand, ''), EXCLUDED.brand),
@@ -705,6 +723,7 @@ _UPSERT_ENCERRAMENTOS_SQL = """
         sale_deadline_date = EXCLUDED.sale_deadline_date,
         encerramento_status = EXCLUDED.encerramento_status,
         is_expired = EXCLUDED.is_expired,
+        encerramento_numero_certificado = EXCLUDED.encerramento_numero_certificado,
         updated_at = NOW()
 """
 
@@ -735,12 +754,14 @@ _DELETE_EAN_ORFAOS_SQL = """
 _CLEAR_ENCERRAMENTOS_SQL = """
     UPDATE cert_products
     SET sale_deadline = NULL, sale_deadline_date = NULL,
-        encerramento_status = NULL, is_expired = FALSE, updated_at = NOW()
+        encerramento_status = NULL, is_expired = FALSE,
+        encerramento_numero_certificado = NULL, updated_at = NOW()
     WHERE NOT (sku = ANY(%s))
       AND (sale_deadline IS NOT NULL
            OR sale_deadline_date IS NOT NULL
            OR encerramento_status IS NOT NULL
-           OR is_expired = TRUE)
+           OR is_expired = TRUE
+           OR encerramento_numero_certificado IS NOT NULL)
 """
 
 
@@ -820,6 +841,12 @@ def sync_sheets_to_db() -> dict:
                 "motivo": _PENDENCIA_CERTIFICADO_DIVERGENTE,
                 "certificados": [atual, antigo],
             })
+        elif atual and atual == antigo and derive_situacao_status(produto.get("situacao")) == "ATIVO":
+            pendencias.append({
+                "sku": e["sku"],
+                "motivo": _PENDENCIA_ATIVO_E_ENCERRADO,
+                "certificados": [atual],
+            })
     if not ativos and not encerramentos_lidos:
         return {"synced": 0, "error": "No products found or Sheets not configured"}
     if not DATABASE_URL:
@@ -850,6 +877,7 @@ def sync_sheets_to_db() -> dict:
                         e["sku"], e["name"], e["brand"], e["numero_certificado"],
                         e["sale_deadline"] or None, e["sale_deadline_date"],
                         e["encerramento_status"] or None, e["is_expired"],
+                        e.get("numero_certificado") or None,
                     ],
                 )
             # A limpeza SO pode rodar com a aba lida de verdade. `_read_encerramentos_
