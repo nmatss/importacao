@@ -387,3 +387,95 @@ def test_audit_run_keeps_memory_bounded(mocker):
         marketplace._remember(f"run-{i}", {"status": "completed"})
     assert len(marketplace._running_audits) == marketplace._MAX_TRACKED_AUDITS
     assert "run-0" not in marketplace._running_audits
+    marketplace._running_audits.clear()
+
+
+# --- K4: `category` vem do usuario e vira path de URL (SSRF / path traversal) --
+
+_BAD_CATEGORIES = [
+    "../../admin",
+    "a?b=c",
+    "a/../b",
+    "a/./b",
+    "/a",
+    "a/",
+    "a//b",
+    "A/B",
+    "a b",
+    "a%2e%2e/b",
+    "a#frag",
+    "a\\b",
+    "https://evil.invalid/x",
+    "",
+]
+
+
+@pytest.fixture
+def audit_route(mocker):
+    """Rota de auditoria isolada: sem thread real, sem rate limit entre testes."""
+    from app.routes import marketplace
+
+    marketplace._running_audits.clear()
+    marketplace.limiter.reset()
+    # Troca so a referencia `threading` DESTE modulo: patchar
+    # `threading.Thread` global quebra o Timer interno do rate limiter.
+    thread = mocker.MagicMock(name="Thread")
+    mocker.patch.object(marketplace, "threading", mocker.MagicMock(Thread=thread))
+    yield marketplace, thread
+    marketplace._running_audits.clear()
+    marketplace.limiter.reset()
+
+
+@pytest.mark.parametrize("category", _BAD_CATEGORIES)
+def test_fetch_refuses_a_category_outside_the_allow_list(mocker, category):
+    get = mocker.patch.object(ma.requests, "get")
+    with pytest.raises(ValueError, match="categoria"):
+        ma.fetch_category_products(category, sleep=0)
+    get.assert_not_called()
+
+
+def test_default_category_passes_the_allow_list():
+    assert ma.is_valid_category_path(ma.DEFAULT_CATEGORY_PATH)
+
+
+def test_fetch_never_follows_redirects(mocker):
+    """Um 30x do site nao pode levar a leitura para outro host."""
+    redirect = mocker.MagicMock(status_code=302, headers={"Location": "http://169.254.169.254/"})
+    get = mocker.patch.object(ma.requests, "get", return_value=redirect)
+
+    with pytest.raises(requests.RequestException, match="302"):
+        ma.fetch_category_products(sleep=0)
+
+    assert get.call_args.kwargs["allow_redirects"] is False
+    assert get.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("category", ["../../admin", "a?b=c", "a/../b", "a%2e%2e/b", ""])
+async def test_audit_route_rejects_a_forged_category_with_400(
+    test_client, api_key_headers, audit_route, category
+):
+    marketplace, thread = audit_route
+    resp = await test_client.post(
+        "/api/marketplace/audit", params={"category": category}, headers=api_key_headers
+    )
+    assert resp.status_code == 400
+    thread.assert_not_called()
+    assert marketplace._running_audits == {}
+
+
+@pytest.mark.asyncio
+async def test_audit_route_accepts_the_default_and_a_well_formed_category(
+    test_client, api_key_headers, audit_route
+):
+    marketplace, thread = audit_route
+    resp = await test_client.post("/api/marketplace/audit", headers=api_key_headers)
+    assert resp.status_code == 200
+    assert thread.call_args.kwargs["args"][1] == ma.DEFAULT_CATEGORY_PATH
+
+    marketplace._running_audits.clear()
+    resp = await test_client.post(
+        "/api/marketplace/audit", params={"category": "jogos/quebra-cabeca"}, headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    assert thread.call_args.kwargs["args"][1] == "jogos/quebra-cabeca"

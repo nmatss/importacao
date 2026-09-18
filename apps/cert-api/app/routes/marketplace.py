@@ -12,6 +12,7 @@ from app.db.postgres import db
 from app.services.marketplace_audit import (
     DEFAULT_CATEGORY_PATH,
     DEFAULT_PIECES_THRESHOLD,
+    is_valid_category_path,
     run_audit,
 )
 from app.utils.logging import log
@@ -64,8 +65,16 @@ def start_marketplace_audit(
 
     Returns:
         `{'run_id': ..., 'status': 'running'}`.
+
+    Raises:
+        HTTPException: 400 quando `category` nao cabe na allow-list. O valor vem
+            do usuario e vira PATH da URL lida pelo servidor: sem isto,
+            `../../admin` ou `a?b=c` escolheriam outro endpoint do site.
     """
     import uuid
+
+    if not is_valid_category_path(category):
+        raise HTTPException(400, "Categoria invalida")
 
     run_id = str(uuid.uuid4())
     _remember(run_id, {"status": "running", "started_at": time.time()})

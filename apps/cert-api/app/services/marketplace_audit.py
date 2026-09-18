@@ -34,6 +34,13 @@ DEFAULT_PIECES_THRESHOLD = 500
 HOUSE_SELLER_ID = "1"
 
 DEFAULT_CATEGORY_PATH = "category-1/jogos/category-2/quebra-cabeca"
+# K4 (SSRF/path traversal): o caminho da categoria entra no PATH da URL lida
+# pelo servidor. Allow-list de formato, nunca block-list: so segmentos
+# minusculos/digitos/hifen separados por UMA barra. Fica de fora tudo o que o
+# `requests` normalizaria ou reinterpretaria: `..`, `.`, `?`, `#`, `%`, `\`,
+# barra inicial/final/dupla, esquema e espaco.
+_CATEGORY_PATH_RE = re.compile(r"[a-z0-9-]+(?:/[a-z0-9-]+)*")
+_MAX_CATEGORY_PATH_CHARS = 200
 _PAGE_SIZE = 50
 _MAX_PAGES = 20
 
@@ -221,6 +228,18 @@ def classify(
     return verdict, f"{evidencia}. Informativo: {quantas}."
 
 
+def is_valid_category_path(category_path: object) -> bool:
+    """True quando o caminho da categoria cabe na allow-list de formato.
+
+    `fullmatch`, e nao `match` com `$`: em Python `$` aceita um `\n` final.
+    """
+    return (
+        isinstance(category_path, str)
+        and 0 < len(category_path) <= _MAX_CATEGORY_PATH_CHARS
+        and _CATEGORY_PATH_RE.fullmatch(category_path) is not None
+    )
+
+
 def _store_config() -> dict[str, str]:
     """Config da loja Imaginarium (dominio publico e URL base)."""
     return VTEX_STORES["imaginarium"]
@@ -240,11 +259,15 @@ def fetch_category_products(
     request infinito.
 
     Raises:
+        ValueError: `category_path` fora da allow-list (defesa em profundidade;
+            a rota ja responde 400 antes de chegar aqui).
         requests.RequestException: qualquer pagina indisponivel ou leitura
             incompleta; nenhum inventario parcial e retornado como completo.
     """
     import time
 
+    if not is_valid_category_path(category_path):
+        raise ValueError("Caminho de categoria invalido")
     delay = VTEX_REQUEST_DELAY if sleep is None else sleep
     domain = _store_config()["domain"]
     url = f"https://{domain}/api/io/_v/api/intelligent-search/product_search/{category_path}"
@@ -256,8 +279,14 @@ def fetch_category_products(
     for page in range(max_pages):
         if page and delay:
             time.sleep(delay)
+        # Redirect nunca e seguido: um 30x do site (ou de um path forjado) nao
+        # pode levar esta leitura para outro host. 30x cai no `!= 200` abaixo.
         resp = requests.get(
-            url, params={"page": page + 1, "count": page_size}, headers=headers, timeout=20
+            url,
+            params={"page": page + 1, "count": page_size},
+            headers=headers,
+            timeout=20,
+            allow_redirects=False,
         )
         if resp.status_code != 200:
             raise requests.RequestException(f"Inventario marketplace incompleto: pagina {page + 1} HTTP {resp.status_code}")
