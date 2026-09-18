@@ -151,6 +151,17 @@ const COLUMN_RULES: Record<SyncableField, ColumnRule> = {
     kind: 'text',
     headers: ['CONSOLIDACAO (PKT&IMG)', 'CONSOLIDACAO'],
     maxLength: 255,
+    // User decision 18/09: dates in this reference column require source
+    // review; never replace an existing consolidation reference with a date.
+    refine: (value) =>
+      /^(?:\d{1,2}[/.\-]\d{1,2}[/.\-]\d{4}|\d{4}-\d{2}-\d{2})(?:[T\s].*)?$/.test(value)
+        ? {
+            available: false,
+            raw: value,
+            reason:
+              'Data na coluna de referência da consolidação; referência preservada, pendente de revisão da área.',
+          }
+        : { available: true, value },
   },
 };
 

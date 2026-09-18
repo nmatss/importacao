@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-18 — Preservação da referência de consolidação
+
+- Datas na coluna de referência da consolidação ficam como pendência de revisão; a sync
+  preserva a referência existente, conforme decisão explícita do usuário.
+- A divergência de código PK220 permanece para análise de Odett/Eduarda, sem substituição
+  automática do código em documentos, sistema ou fontes.
+
 ## 2026-09-18 — Correções do aceite e integração Cadastro→Produtos (local)
 
 - Integra cadastro validado à leitura de Produtos e relatórios, com pendências explícitas para
