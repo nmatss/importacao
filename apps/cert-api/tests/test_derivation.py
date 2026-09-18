@@ -1416,6 +1416,52 @@ class TestSiteStatusEnxergaOLicenciamentoVencido:
         ) == ("CONFORME", None)
 
 
+class TestSituacaoToleraDigitacao:
+    """A coluna U e digitada a mao: ponto final, espaco e caixa nao mudam o status.
+
+    "Ativo." caia em None e o produto ia para o fallback historico — que, sem
+    marcador claro, devolve ENCERRADO. Um ponto final encerrava o certificado.
+    """
+
+    @pytest.mark.parametrize(
+        ("situacao", "esperado"),
+        [
+            ("Ativo", "ATIVO"),
+            ("Ativo.", "ATIVO"),
+            (" ativo ", "ATIVO"),
+            ("ATIVA", "ATIVO"),
+            ("Ativa.", "ATIVO"),
+            ("ATIVO;", "ATIVO"),
+            ("Vigente.", "ATIVO"),
+            ("Ativo - em manutenção", "ATIVO"),
+            ("Encerrado", "ENCERRADO"),
+            ("Encerrado.", "ENCERRADO"),
+            (" ENCERRADA ", "ENCERRADO"),
+            ("SKU excluído.", "ENCERRADO"),
+            # Desconhecido continua None: quem decide e o fallback, nao um palpite.
+            ("", None),
+            (None, None),
+            (".", None),
+            ("xpto", None),
+            ("a confirmar", None),
+            ("Inativo", None),
+            ("Não ativo", None),
+            ("Reativo", None),
+            ("Ativou o cadastro", None),
+        ],
+    )
+    def test_situacao_normalizada(self, situacao, esperado):
+        assert derivation.derive_situacao_status(situacao) == esperado
+
+    def test_ponto_final_nao_encerra_certificado_ativo(self):
+        dims = compute_status_dimensions(
+            {"situacao": "Ativo.", "sheet_status": "", "last_validation_status": "OK"},
+            today=date(2026, 9, 18),
+        )
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["cert_status_reason"] is None
+
+
 class TestGuardasEstaticas:
     """Declaracao ausente e bug: prove que a regra esta escrita no codigo."""
 

@@ -391,6 +391,9 @@ def derive_within_sale_deadline(
     return deadline >= (today or _today_sp())
 
 
+_SITUACAO_ATIVA_RE = re.compile(r"^(ativ[oa]|vigente)\b")
+
+
 def derive_situacao_status(situacao: str | None) -> str | None:
     """Traduz a coluna U (SITUAÇÃO) das abas de produto em ATIVO | ENCERRADO.
 
@@ -410,7 +413,10 @@ def derive_situacao_status(situacao: str | None) -> str | None:
         return None
     if "exclu" in s or "encerrad" in s or _tem_bloqueio(s):
         return "ENCERRADO"
-    if s in ("ativo", "ativa", "vigente") or s.startswith("ativo "):
+    # A célula é digitada à mão: "Ativo.", " ativo ", "ATIVA", "Ativo;" são o mesmo
+    # valor. A palavra tem de ABRIR a célula e terminar em fronteira — "Inativo",
+    # "Não ativo", "Reativo" e "Ativou o cadastro" continuam sem classificação.
+    if _SITUACAO_ATIVA_RE.match(s):
         return "ATIVO"
     return None
 
