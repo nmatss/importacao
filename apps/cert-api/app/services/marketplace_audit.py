@@ -17,6 +17,7 @@ Nada aqui escreve na VTEX, no Linx ou na planilha.
 """
 
 import re
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -43,6 +44,16 @@ _CATEGORY_PATH_RE = re.compile(r"[a-z0-9-]+(?:/[a-z0-9-]+)*")
 _MAX_CATEGORY_PATH_CHARS = 200
 _PAGE_SIZE = 50
 _MAX_PAGES = 20
+
+# K6: uma pagina que falha por motivo TRANSITORIO ganha no maximo 2 novas
+# tentativas, com espera crescente (2s, 4s). Esgotadas, a leitura inteira falha:
+# inventario parcial nunca e devolvido como completo. Pior caso por pagina:
+# 3 x (5s conexao + 20s leitura) + 6s de espera.
+_MAX_RETRIES_PER_PAGE = 2
+_RETRY_BACKOFF_SECONDS = 2.0
+_REQUEST_TIMEOUT = (5, 20)
+# 4xx (404, 403) nao melhora com insistencia e so castigaria o site.
+_RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 _PIECES_RE = re.compile(r"(\d[\d.\s]*)\s*pe[çc]as?\b", re.IGNORECASE)
 # K3: a evidencia pode estar em QUALQUER especificacao cujo nome ou valor cite
@@ -170,6 +181,27 @@ def extract_pieces(product: dict) -> int | None:
     return None
 
 
+def _available_quantity(offer: dict) -> int:
+    """Estoque do seller como inteiro.
+
+    A VTEX ja devolveu numero, string e string fracionaria ("3.0"); `int("3.0")`
+    levantava ValueError e derrubava o lote inteiro. Valor que nao e numero
+    levanta ValueError de proposito: o item vai para "nao verificado", em vez
+    de ser escondido como "sem estoque".
+    """
+    raw = offer.get("AvailableQuantity")
+    if raw is None or raw == "":
+        return 0
+    if isinstance(raw, bool):
+        raise ValueError("AvailableQuantity booleano")
+    if isinstance(raw, int):
+        return raw
+    number = float(str(raw).strip().replace(",", "."))
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValueError("AvailableQuantity nao finito")
+    return int(number)
+
+
 def third_party_sellers(product: dict) -> list[dict]:
     """Sellers terceiros com estoque para o produto.
 
@@ -188,8 +220,8 @@ def third_party_sellers(product: dict) -> list[dict]:
             seller_id = str(seller.get("sellerId") or "").strip()
             if not seller_id or seller_id == HOUSE_SELLER_ID or seller_id in vistos:
                 continue
-            offer = seller.get("commertialOffer") or {}
-            if int(offer.get("AvailableQuantity") or 0) <= 0:
+            offer = seller.get("commertialOffer")
+            if _available_quantity(offer if isinstance(offer, dict) else {}) <= 0:
                 continue
             vistos.add(seller_id)
             out.append({"id": seller_id, "name": str(seller.get("sellerName") or "").strip()})
@@ -245,6 +277,49 @@ def _store_config() -> dict[str, str]:
     return VTEX_STORES["imaginarium"]
 
 
+def _get_page(url: str, page: int, page_size: int, headers: dict[str, str]) -> requests.Response:
+    """Le UMA pagina, com retry limitado para falha transitoria.
+
+    Raises:
+        requests.RequestException: falha definitiva (4xx/30x) ou transitoria que
+            sobreviveu a `_MAX_RETRIES_PER_PAGE` novas tentativas.
+    """
+    erro = requests.RequestException(f"Inventario marketplace incompleto: pagina {page}")
+    for attempt in range(_MAX_RETRIES_PER_PAGE + 1):
+        if attempt:
+            time.sleep(_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)))
+        try:
+            # Redirect nunca e seguido: um 30x do site (ou de um path forjado)
+            # nao pode levar esta leitura para outro host.
+            resp = requests.get(
+                url,
+                params={"page": page, "count": page_size},
+                headers=headers,
+                timeout=_REQUEST_TIMEOUT,
+                allow_redirects=False,
+            )
+        except requests.RequestException as e:
+            # So o TIPO do erro: a mensagem do `requests` carrega a URL completa.
+            erro = requests.RequestException(
+                f"Inventario marketplace incompleto: pagina {page} indisponivel ({type(e).__name__})"
+            )
+            log.warning(
+                f"Marketplace audit: pagina {page} tentativa {attempt + 1} falhou ({type(e).__name__})"
+            )
+            continue
+        if resp.status_code == 200:
+            return resp
+        erro = requests.RequestException(
+            f"Inventario marketplace incompleto: pagina {page} HTTP {resp.status_code}"
+        )
+        if resp.status_code not in _RETRYABLE_STATUS:
+            break
+        log.warning(
+            f"Marketplace audit: pagina {page} tentativa {attempt + 1} HTTP {resp.status_code}"
+        )
+    raise erro
+
+
 def fetch_category_products(
     category_path: str = DEFAULT_CATEGORY_PATH,
     page_size: int = _PAGE_SIZE,
@@ -256,7 +331,7 @@ def fetch_category_products(
     A paginacao para quando a pagina volta com menos produtos que o tamanho
     pedido — a API nao garante um total confiavel — e sempre no teto de
     `max_pages`, para que uma categoria inesperadamente grande nao vire um
-    request infinito.
+    request infinito. Cada pagina tem retry limitado (`_get_page`).
 
     Raises:
         ValueError: `category_path` fora da allow-list (defesa em profundidade;
@@ -264,8 +339,6 @@ def fetch_category_products(
         requests.RequestException: qualquer pagina indisponivel ou leitura
             incompleta; nenhum inventario parcial e retornado como completo.
     """
-    import time
-
     if not is_valid_category_path(category_path):
         raise ValueError("Caminho de categoria invalido")
     delay = VTEX_REQUEST_DELAY if sleep is None else sleep
@@ -279,17 +352,7 @@ def fetch_category_products(
     for page in range(max_pages):
         if page and delay:
             time.sleep(delay)
-        # Redirect nunca e seguido: um 30x do site (ou de um path forjado) nao
-        # pode levar esta leitura para outro host. 30x cai no `!= 200` abaixo.
-        resp = requests.get(
-            url,
-            params={"page": page + 1, "count": page_size},
-            headers=headers,
-            timeout=20,
-            allow_redirects=False,
-        )
-        if resp.status_code != 200:
-            raise requests.RequestException(f"Inventario marketplace incompleto: pagina {page + 1} HTTP {resp.status_code}")
+        resp = _get_page(url, page + 1, page_size, headers)
         payload = resp.json()
         if not isinstance(payload, dict) or not isinstance(payload.get("products"), list):
             raise requests.RequestException(f"Inventario marketplace invalido: pagina {page + 1} sem lista products")
@@ -303,6 +366,94 @@ def fetch_category_products(
     return produtos
 
 
+def _audit_one(product: dict, site_url: str, threshold: int) -> dict | None:
+    """Linha de UM produto, ou None quando nao ha seller terceiro com estoque."""
+    sellers = third_party_sellers(product)
+    if not sellers:
+        return None
+    name = str(product.get("productName") or product.get("name") or "")
+    pieces = extract_pieces(product)
+    cert_text = extract_inmetro_text(product)
+    verdict, reason = classify(name, pieces, cert_text, threshold)
+    link = str(product.get("link") or "")
+    if not link:
+        link_text = str(product.get("linkText") or "")
+        link = f"{site_url}/{link_text}/p" if link_text else ""
+    elif not link.startswith("http"):
+        link = f"{site_url}{link}"
+    return {
+        "vtex_product_id": str(product.get("productId") or product.get("id") or ""),
+        "seller_id": sellers[0]["id"],
+        "seller_name": sellers[0]["name"],
+        "name": name,
+        "url": link,
+        "pieces": pieces,
+        "cert_text": cert_text or None,
+        "verdict": verdict,
+        "reason": reason,
+    }
+
+
+def _unverified_row(product: object, error: Exception) -> dict | None:
+    """Linha REVISAR para um item que nao pode ser lido, se ele for identificavel.
+
+    Sem `productId` nao ha o que gravar (`vtex_product_id` e NOT NULL e a linha
+    nao levaria o time a lugar nenhum): o item so entra na contagem.
+    """
+    if not isinstance(product, dict):
+        return None
+    product_id = str(product.get("productId") or product.get("id") or "").strip()
+    if not product_id:
+        return None
+    name = product.get("productName") or product.get("name")
+    return {
+        "vtex_product_id": product_id,
+        "seller_id": None,
+        "seller_name": None,
+        "name": str(name) if isinstance(name, str) else None,
+        "url": "",
+        "pieces": None,
+        "cert_text": None,
+        "verdict": "REVISAR",
+        "reason": (
+            "Item não verificado: os dados do produto vieram malformados do site "
+            f"({type(error).__name__}). Conferir manualmente."
+        ),
+    }
+
+
+def audit_batch(
+    products: list, threshold: int = DEFAULT_PIECES_THRESHOLD
+) -> tuple[list[dict], int]:
+    """Classifica o lote isolando cada item (K5).
+
+    Um produto malformado (`None`, estoque que nao e numero, campo de tipo
+    inesperado) NAO derruba os demais: e contado, logado e — quando
+    identificavel — gravado como REVISAR "nao verificado". E a mesma classe de
+    defeito que parou o sync da planilha por 6 dias por causa de uma linha.
+
+    Returns:
+        `(linhas, nao_verificados)`.
+    """
+    site_url = _store_config()["site_url"]
+    linhas: list[dict] = []
+    nao_verificados = 0
+    for index, product in enumerate(products):
+        try:
+            if not isinstance(product, dict):
+                raise TypeError(f"produto nao e objeto: {type(product).__name__}")
+            linha = _audit_one(product, site_url, threshold)
+        except Exception as e:  # noqa: BLE001 - isolamento por item e o objetivo
+            nao_verificados += 1
+            log.warning(
+                f"Marketplace audit: item {index} nao verificado ({type(e).__name__})"
+            )
+            linha = _unverified_row(product, e)
+        if linha is not None:
+            linhas.append(linha)
+    return linhas, nao_verificados
+
+
 def audit_products(products: list[dict], threshold: int = DEFAULT_PIECES_THRESHOLD) -> list[dict]:
     """Classifica os produtos de marketplace de uma lista ja lida da VTEX.
 
@@ -312,37 +463,9 @@ def audit_products(products: list[dict], threshold: int = DEFAULT_PIECES_THRESHO
     Returns:
         Uma linha por produto de seller terceiro, pronta para
         `cert_marketplace_items`. Produtos so do seller da casa ficam de fora.
+        Para saber quantos itens nao puderam ser lidos, use `audit_batch`.
     """
-    site_url = _store_config()["site_url"]
-    linhas: list[dict] = []
-    for product in products:
-        sellers = third_party_sellers(product)
-        if not sellers:
-            continue
-        name = str(product.get("productName") or product.get("name") or "")
-        pieces = extract_pieces(product)
-        cert_text = extract_inmetro_text(product)
-        verdict, reason = classify(name, pieces, cert_text, threshold)
-        link = str(product.get("link") or "")
-        if not link:
-            link_text = str(product.get("linkText") or "")
-            link = f"{site_url}/{link_text}/p" if link_text else ""
-        elif not link.startswith("http"):
-            link = f"{site_url}{link}"
-        linhas.append(
-            {
-                "vtex_product_id": str(product.get("productId") or product.get("id") or ""),
-                "seller_id": sellers[0]["id"],
-                "seller_name": sellers[0]["name"],
-                "name": name,
-                "url": link,
-                "pieces": pieces,
-                "cert_text": cert_text or None,
-                "verdict": verdict,
-                "reason": reason,
-            }
-        )
-    return linhas
+    return audit_batch(products, threshold)[0]
 
 
 def persist_audit(rows: list[dict], run_id: str) -> int:
@@ -387,21 +510,22 @@ def run_audit(
     """Le a categoria na VTEX, classifica e (opcionalmente) grava.
 
     Returns:
-        Dict com `run_id`, `total`, `summary` e `items`.
+        Dict com `run_id`, `total`, `scanned`, `unverified`, `summary` e `items`.
     """
     run_id = str(uuid.uuid4())
     produtos = fetch_category_products(category_path)
-    linhas = audit_products(produtos, threshold)
+    linhas, nao_verificados = audit_batch(produtos, threshold)
     if persist:
         persist_audit(linhas, run_id)
     log.info(
         f"Marketplace audit {run_id}: {len(produtos)} produto(s) lido(s), "
-        f"{len(linhas)} de seller terceiro"
+        f"{len(linhas)} de seller terceiro, {nao_verificados} nao verificado(s)"
     )
     return {
         "run_id": run_id,
         "total": len(linhas),
         "scanned": len(produtos),
+        "unverified": nao_verificados,
         "summary": summarize(linhas),
         "items": linhas,
     }

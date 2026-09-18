@@ -267,21 +267,23 @@ def test_fetch_respects_the_page_ceiling(mocker):
 
 
 def test_fetch_rejects_partial_inventory_when_a_later_page_fails(mocker):
+    mocker.patch.object(ma.time, "sleep")
     ok = mocker.MagicMock(
         status_code=200, **{"json.return_value": {"products": [{"productId": "x"}] * 2}}
     )
-    get = mocker.patch.object(
-        ma.requests, "get", side_effect=[ok, requests.RequestException("timeout")]
-    )
+    falha = requests.RequestException("timeout")
+    get = mocker.patch.object(ma.requests, "get", side_effect=[ok, falha, falha, falha])
 
     with pytest.raises(requests.RequestException):
         ma.fetch_category_products(page_size=2, max_pages=5, sleep=0)
 
-    assert get.call_count == 2
+    # 1 leitura boa + 3 tentativas da pagina seguinte (K6); nada parcial volta.
+    assert get.call_count == 4
 
 
 def test_fetch_propagates_a_failure_on_the_first_page(mocker):
     """Falhar na primeira pagina e "nao consegui ler", nao "categoria vazia"."""
+    mocker.patch.object(ma.time, "sleep")
     mocker.patch.object(ma.requests, "get", side_effect=requests.RequestException("dns"))
     with pytest.raises(requests.RequestException):
         ma.fetch_category_products(sleep=0)
@@ -479,3 +481,129 @@ async def test_audit_route_accepts_the_default_and_a_well_formed_category(
     )
     assert resp.status_code == 200
     assert thread.call_args.kwargs["args"][1] == "jogos/quebra-cabeca"
+
+
+# --- K5: um item malformado nao derruba o lote -------------------------------
+
+
+def test_fractional_stock_string_is_read_as_a_number():
+    """`AvailableQuantity="3.0"` derrubava o lote inteiro com ValueError."""
+    product = _product("Puzzle 60 pecas", available="3.0")
+    assert ma.third_party_sellers(product) == [{"id": "lojaparceira", "name": "Loja Parceira"}]
+
+
+def test_malformed_items_are_counted_and_the_batch_goes_on():
+    lixo = _product("Puzzle quebrado", product_id="ruim", available="muitas")
+    produtos = [
+        _product("Puzzle 60 pecas", product_id="a", cert_text=""),
+        None,
+        "texto solto",
+        lixo,
+        _product("Puzzle 500 pecas", product_id="b", cert_text="CE-BRI/ICEPEX-N 01264-25"),
+    ]
+
+    rows, unverified = ma.audit_batch(produtos)
+
+    assert unverified == 3
+    por_id = {r["vtex_product_id"]: r for r in rows}
+    assert por_id["a"]["verdict"] == "NAO_OK"
+    assert por_id["b"]["verdict"] == "OK"
+    # O item identificavel fica REGISTRADO como nao verificado, nunca como OK/NAO_OK.
+    assert por_id["ruim"]["verdict"] == "REVISAR"
+    assert "não verificado" in por_id["ruim"]["reason"].lower()
+    assert por_id["ruim"]["name"] == "Puzzle quebrado"
+    # Sem identificacao nao ha linha gravavel (vtex_product_id e NOT NULL): so conta.
+    assert len(rows) == 3
+
+
+def test_audit_products_keeps_returning_only_the_rows():
+    rows = ma.audit_products([None, _product("Puzzle 60 pecas", cert_text="")])
+    assert [r["verdict"] for r in rows] == ["NAO_OK"]
+
+
+def test_run_audit_reports_the_unverified_count(mocker):
+    mocker.patch.object(
+        ma, "fetch_category_products", return_value=[None, _product("Puzzle 60 pecas", cert_text="")]
+    )
+    persist = mocker.patch.object(ma, "persist_audit")
+
+    result = ma.run_audit()
+
+    assert result["scanned"] == 2
+    assert result["total"] == 1
+    assert result["unverified"] == 1
+    persist.assert_called_once()
+
+
+# --- K6: retry limitado por pagina, sem abrir mao do falhar-fechado -----------
+
+
+def _page(mocker, n: int, status: int = 200):
+    return mocker.MagicMock(
+        status_code=status, **{"json.return_value": {"products": [{"productId": str(i)} for i in range(n)]}}
+    )
+
+
+@pytest.fixture
+def no_backoff(mocker):
+    return mocker.patch.object(ma.time, "sleep")
+
+
+def test_transient_failure_is_retried_and_the_page_is_read(mocker, no_backoff):
+    get = mocker.patch.object(
+        ma.requests,
+        "get",
+        side_effect=[requests.Timeout("lento"), _page(mocker, 0, status=503), _page(mocker, 1)],
+    )
+
+    produtos = ma.fetch_category_products(page_size=3, sleep=0)
+
+    assert len(produtos) == 1
+    assert get.call_count == 3
+    # Backoff crescente entre as tentativas da MESMA pagina.
+    esperas = [c.args[0] for c in no_backoff.call_args_list]
+    assert esperas == [ma._RETRY_BACKOFF_SECONDS, ma._RETRY_BACKOFF_SECONDS * 2]
+
+
+def test_retry_is_bounded_to_two_new_attempts_per_page(mocker, no_backoff):
+    get = mocker.patch.object(ma.requests, "get", side_effect=requests.ConnectionError("fora"))
+
+    with pytest.raises(requests.RequestException):
+        ma.fetch_category_products(page_size=3, sleep=0)
+
+    assert get.call_count == 1 + ma._MAX_RETRIES_PER_PAGE == 3
+
+
+def test_retry_exhausted_on_a_later_page_never_persists_partial_inventory(mocker, no_backoff):
+    """Falhar-fechado continua valendo: esgotado o retry, nada e gravado."""
+    falha = _page(mocker, 0, status=503)
+    get = mocker.patch.object(
+        ma.requests, "get", side_effect=[_page(mocker, ma._PAGE_SIZE), falha, falha, falha]
+    )
+    mocker.patch.object(ma, "VTEX_REQUEST_DELAY", 0)
+    persist = mocker.patch.object(ma, "persist_audit")
+
+    with pytest.raises(requests.RequestException, match="503"):
+        ma.run_audit()
+
+    persist.assert_not_called()
+    assert get.call_count == 4
+
+
+def test_client_error_is_not_retried(mocker, no_backoff):
+    """404/403 nao melhoram com insistencia: falha na primeira."""
+    get = mocker.patch.object(ma.requests, "get", return_value=_page(mocker, 0, status=404))
+
+    with pytest.raises(requests.RequestException, match="404"):
+        ma.fetch_category_products(page_size=3, sleep=0)
+
+    assert get.call_count == 1
+    no_backoff.assert_not_called()
+
+
+def test_rate_limited_page_is_retried(mocker, no_backoff):
+    get = mocker.patch.object(
+        ma.requests, "get", side_effect=[_page(mocker, 0, status=429), _page(mocker, 2)]
+    )
+    assert len(ma.fetch_category_products(page_size=3, sleep=0)) == 2
+    assert get.call_count == 2

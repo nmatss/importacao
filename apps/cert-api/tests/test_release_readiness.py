@@ -82,8 +82,10 @@ def test_invalid_marketplace_schema_cannot_persist_empty_success(mocker, payload
 def test_later_http_error_cannot_persist_partial_inventory(mocker):
     full = mocker.MagicMock(status_code=200, **{"json.return_value": {"products": [{}] * marketplace._PAGE_SIZE}})
     failed = mocker.MagicMock(status_code=503)
-    mocker.patch.object(marketplace.requests, "get", side_effect=[full, failed])
+    # K6: a pagina que falha ganha 2 novas tentativas antes de falhar-fechado.
+    mocker.patch.object(marketplace.requests, "get", side_effect=[full, failed, failed, failed])
     mocker.patch.object(marketplace, "VTEX_REQUEST_DELAY", 0)
+    mocker.patch.object(marketplace, "_RETRY_BACKOFF_SECONDS", 0)
     persist = mocker.patch.object(marketplace, "persist_audit")
     with pytest.raises(requests.RequestException, match="503"):
         marketplace.run_audit()
