@@ -600,9 +600,15 @@ def create_certificate(
             if pdf_bytes is not None and pdf_filename:
                 _store_pdf(pdf_bytes, pdf_filename)
             link_result = _link_skus_locked(cert, lista, effective_created_by, dry_run=False)
-        except Exception:
+        except Exception as exc:
             # Falha no meio do caminho: so desfaz se NENHUM item chegou a existir.
-            _discard_empty_certificate(cert_id, pdf_filename)
+            # O log e o unico rastro do cadastro desfeito (a gravacao no Linx de um
+            # SKU, se chegou a acontecer, tem a propria linha de log no linx_service).
+            discarded = _discard_empty_certificate(cert_id, pdf_filename)
+            log.error(
+                f"Certificate {cert_id} creation failed (type={type(exc).__name__}); "
+                f"empty record discarded={discarded}"
+            )
             raise
 
         # "Existe no Linx?" so o ERP responde, e so na gravacao. Se nenhum SKU
