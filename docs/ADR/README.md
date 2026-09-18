@@ -17,3 +17,4 @@ ADRs atuais:
 - `../adr/0004-cert-api-separate-service.md`
 - `../adr/0005-design-system-v2.md`
 - `../adr/0006-document-items-source-of-truth.md`
+- `../adr/0007-fail-closed-auth-and-chat-webhook.md`

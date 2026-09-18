@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-18 — Fail-closed no login e webhook do Chat
+
+- `ALLOWED_DOMAIN` vazio recusa login; em produção a API não sobe sem a lista.
+- Webhook do Google Chat só aceita `https://chat.googleapis.com` na entrega e na gravação em settings.
+- Holds operacionais do aceite permanecem humanos: BL PK219, FIM_VENDAS, versões concorrentes, item PK220, 5 SKUs.
+- ADR `docs/adr/0007-fail-closed-auth-and-chat-webhook.md`.
+
 ## 2026-09-18 — Evidência de produção do aceite
 - Documenta SHA 963f807, Follow-up dos três pilotos (32 campos, referência de consolidação preservada) e leitura de certificação 947/5/674 com Linx write desligado.
 - Pendências restantes: BL PK219 <90%, FIM_VENDAS, versões concorrentes, item PK220, 5 SKUs ambíguos.

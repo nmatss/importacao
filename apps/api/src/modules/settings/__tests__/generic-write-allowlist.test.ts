@@ -54,11 +54,24 @@ describe('PUT /api/settings/:key — allowlist de chaves', () => {
   });
 
   it('aceita a chave que a rota generica de fato serve', async () => {
-    const { req, res, payload } = call('google_chat_webhook_url');
+    const { req, res, payload } = call('google_chat_webhook_url', {
+      value: 'https://chat.googleapis.com/v1/spaces/AAA/messages?key=k&token=t',
+    });
     await settingsController.set(req, res);
 
     expect(serviceMocks.set).toHaveBeenCalledTimes(1);
     expect(payload.status).toBe(200);
+  });
+
+  it('recusa webhook HTTPS que nao e o host oficial do Chat', async () => {
+    const { req, res, payload } = call('google_chat_webhook_url', {
+      value: 'https://example.com/hook',
+    });
+    await settingsController.set(req, res);
+
+    expect(serviceMocks.set).not.toHaveBeenCalled();
+    expect(payload.status).toBe(400);
+    expect(JSON.stringify(payload.body)).toContain('chat.googleapis.com');
   });
 
   it('recusa smtp_from e aponta a rota que valida', async () => {

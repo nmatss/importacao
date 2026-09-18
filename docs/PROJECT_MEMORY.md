@@ -1,5 +1,12 @@
 # Project Memory - Importacao
 
+## 2026-09-18 — Fail-closed de autenticação e Chat
+
+Allowlist vazia não abre o tenant. Webhook do Chat só em `chat.googleapis.com`.
+JWT localStorage e HSTS curto permanecem aceitos neste ambiente interno.
+FIM_VENDAS, piso BL 90%, picker só inspeção e item PK220 não se resolvem no
+código. ADR 0007.
+
 ## 2026-09-18 — Precedência aprovada para Cadastro→Produtos
 
 Cadastro validado é fonte dos novos certificados; conflitos com a planilha são pendências

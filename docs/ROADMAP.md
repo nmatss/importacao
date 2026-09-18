@@ -1,5 +1,14 @@
 # Roadmap
 
+## 2026-09-18 — Holds do aceite (não automatizar)
+
+- Homologar FIM_VENDAS no Linx só com autorização explícita e `LINX_WRITE` no
+  menor escopo. Não ligar a flag neste corte.
+- BL PK219: nova extração/verificação sem relaxar 90% e sem inventar campo.
+- Odett/Eduarda: versão canônica de documentos e item PK220.
+- Certificação: 5 SKUs ambíguos na planilha. Sync já lista; não overwrite.
+- Follow-up: nova prévia antes de sair de `dry_run` no cron.
+
 ## 2026-09-12 — Cronograma e critérios de liberação
 
 Cronograma autorizado atualizado no Sheets, com janelas propostas 14/09–23/10/2026.

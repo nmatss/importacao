@@ -1,5 +1,16 @@
 # Known Issues
 
+## 2026-09-18 — Holds após decisões profissionais
+
+Código do tenant e do webhook do Chat fecha fail-closed (ADR 0007). Produção
+`939714a` permanece o SHA publicado até haver autorização de deploy desta
+hardening. **Não** misturar `feat/ux-ui-revisao-2026-09-18` nem a árvore suja
+`fix/cert-sync-quarentena-2026-09-18`.
+
+Permanecem humanos: BL PK219 89,670%; FIM_VENDAS no ERP; versões concorrentes;
+item PK220 27.01.0007 vs 27.01.2007-228; 5 SKUs de certificação; cron Follow-up
+em `dry_run`. JWT em localStorage continua dívida aceita (ADR 0003).
+
 ## 2026-09-18 — Publicado vs restante após PR 104
 
 **Publicado em produção `963f807`:** proteção da referência de consolidação (PR 104); Cadastro→Produtos

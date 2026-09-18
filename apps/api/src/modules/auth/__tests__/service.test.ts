@@ -44,9 +44,8 @@ vi.mock('jsonwebtoken', () => ({
 
 // Set env before importing service
 process.env.JWT_SECRET = 'test-secret';
-// A restricao de organizacao so existe quando ALLOWED_DOMAIN esta definido, e o
-// service le a variavel uma unica vez no import. Sem isto o caminho do claim
-// `hd` nunca era exercitado pelos testes.
+// A restricao de organizacao e fail-closed: ALLOWED_DOMAIN vazio recusa login.
+// O service le a variavel uma unica vez no import.
 process.env.ALLOWED_DOMAIN = 'grupounico.com,imaginarium.com,imaginarium.com.br';
 
 const { authService } = await import('../service.js');

@@ -94,9 +94,12 @@ describe('resolveGoogleChatWebhook()', () => {
 });
 
 describe('isUsableWebhookUrl()', () => {
-  it('aceita https e recusa lixo', () => {
+  it('aceita https no host oficial e recusa o resto', () => {
     expect(isUsableWebhookUrl(WEBHOOK)).toBe(true);
     expect(isUsableWebhookUrl('http://chat.googleapis.com/v1')).toBe(false);
+    expect(isUsableWebhookUrl('https://example.com/hook')).toBe(false);
+    expect(isUsableWebhookUrl('https://127.0.0.1/hook')).toBe(false);
+    expect(isUsableWebhookUrl('https://chat.googleapis.com.evil.com/v1')).toBe(false);
     expect(isUsableWebhookUrl('cole-aqui-o-webhook')).toBe(false);
     expect(isUsableWebhookUrl(null)).toBe(false);
   });
