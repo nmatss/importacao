@@ -1,8 +1,11 @@
 """Auditoria dos quebra-cabecas de sellers terceiros no marketplace Imaginarium.
 
-A aplicabilidade regulatoria, inclusive o criterio de 500 pecas, depende de
-validacao da area de Certificacao. A auditoria inventaria evidencia publicada;
-numero de registro presente nao comprova autenticidade nem dispensa.
+Decisao da reuniao de 11/09/2026: "trazer todos os quebra-cabecas e colocar a
+informacao se esta ok ou nao". O veredito reflete a EVIDENCIA publicada no site
+(informacao de certificado presente ou nao), e so ela. O criterio de 500 pecas
+foi citado, mas NAO aprovado: a contagem de pecas e informativa, nunca dispensa
+um item, e `NAO_EXIGE` nao e atribuido automaticamente por este servico.
+Numero de registro presente nao comprova autenticidade.
 
 O validador existente so percorre os SKUs de `cert_products`, ou seja, o
 catalogo da planilha: item de marketplace NUNCA entrava. Este servico audita por
@@ -44,8 +47,13 @@ _PIECES_SPEC_NAMES = ("componentes", "número de peças", "numero de pecas", "qu
 # poluiriam a fila de revisao do time fiscal.
 _ACCESSORY_RE = re.compile(r"^\s*(porta[-\s]|suporte\b|cola\b|moldura\b|tapete\b)", re.IGNORECASE)
 
-# Texto que os sellers usam para declarar que o item esta dispensado.
-_NAO_POSSUI_RE = re.compile(r"n[ãa]o\s+possui", re.IGNORECASE)
+# Texto que os sellers usam para declarar que o item esta dispensado. Dispensa
+# declarada pelo seller NUNCA vira veredito automatico: vai para conferencia.
+_NAO_POSSUI_RE = re.compile(
+    r"n[ãa]o\s+(?:possui|se\s+aplica|aplic[áa]vel|exige|necessita|requer|precisa|tem\b)"
+    r"|\bisent[oa]s?\b|\bisen[çc][ãa]o\b|\bdispensad[oa]s?\b|\bdispensa\b",
+    re.IGNORECASE,
+)
 
 # Codigo de registro no formato que aparece NESTA especificacao, do tipo
 # "CE-BRI/ICEPEX-N 01264-25". `cert_service.has_registration_number` cobre os
@@ -148,22 +156,33 @@ def third_party_sellers(product: dict) -> list[dict]:
 def classify(
     name: str, pieces: int | None, cert_text: str, threshold: int = DEFAULT_PIECES_THRESHOLD
 ) -> tuple[str, str]:
-    """Aplica a regra de certificacao a um item de marketplace.
+    """Da o "ok ou nao" de um item pela evidencia publicada no site.
+
+    - informacao de certificado com numero/registro reconhecivel -> OK;
+    - nenhuma informacao de certificado -> NAO_OK;
+    - texto sem numero reconhecivel, ou declaracao de dispensa/isencao -> REVISAR.
+
+    `pieces` so entra no motivo, como informacao: a regra de 500 pecas nao foi
+    aprovada e nenhuma contagem muda o veredito. `NAO_EXIGE` nunca sai daqui.
 
     Returns:
-        Tupla `(verdict, reason)` com verdict em
-        OK | NAO_OK | REVISAR | NAO_EXIGE.
+        Tupla `(verdict, reason)` com verdict em OK | NAO_OK | REVISAR.
     """
-    quantas = f"{pieces} pecas" if pieces is not None else "quantidade de pecas nao informada"
-    if not cert_text.strip():
-        evidencia = "informacao de certificacao ausente no site"
-    elif _NAO_POSSUI_RE.search(cert_text):
-        evidencia = "site declara dispensa, ainda nao validada"
-    elif has_certification_code(cert_text):
-        evidencia = "numero de registro informado; autenticidade nao verificada"
+    quantas = f"{pieces} peças" if pieces is not None else "quantidade de peças não informada"
+    texto = (cert_text or "").strip()
+    if not texto:
+        verdict = "NAO_OK"
+        evidencia = "Especificação de certificação não preenchida no site"
+    elif _NAO_POSSUI_RE.search(texto):
+        verdict = "REVISAR"
+        evidencia = "Site declara dispensa de certificação, ainda não validada pelo time fiscal"
+    elif has_certification_code(texto):
+        verdict = "OK"
+        evidencia = "Número de registro informado no site; autenticidade não verificada"
     else:
-        evidencia = "informacao de certificacao presente, sem numero reconhecivel"
-    return "REVISAR", f"Aplicabilidade pendente de Certificacao; {quantas}; {evidencia}"
+        verdict = "REVISAR"
+        evidencia = "Informação de certificação presente no site, sem número de registro reconhecível"
+    return verdict, f"{evidencia}. Informativo: {quantas}."
 
 
 def _store_config() -> dict[str, str]:

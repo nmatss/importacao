@@ -68,21 +68,58 @@ def test_pieces_fall_back_to_the_componentes_spec():
     assert ma.extract_pieces(product) == 500
 
 
-@pytest.mark.parametrize("pieces", [None, 60, 300, 499, 500, 501, 1000])
+_PIECES_CASES = [None, 60, 300, 499, 500, 501, 1000]
+
+
+@pytest.mark.parametrize("pieces", _PIECES_CASES)
+@pytest.mark.parametrize(
+    ("cert_text", "esperado"),
+    [
+        # K1: o veredito reflete a EVIDENCIA publicada no site.
+        ("CE-BRI/ICEPEX-N 01264-25", "OK"),
+        ("Registro Inmetro 004512/2024", "OK"),
+        ("", "NAO_OK"),
+        ("   ", "NAO_OK"),
+        ("Produto certificado", "REVISAR"),
+        ("Nao possui", "REVISAR"),
+        ("Não possui certificação", "REVISAR"),
+        ("Isento de certificação", "REVISAR"),
+        ("Produto dispensado de certificação compulsória", "REVISAR"),
+        ("Não se aplica", "REVISAR"),
+    ],
+)
+def test_verdict_reflects_the_evidence_published_on_the_site(pieces, cert_text, esperado):
+    verdict, _reason = ma.classify("Quebra-cabeca", pieces, cert_text)
+    assert verdict == esperado
+
+
 @pytest.mark.parametrize("cert_text", ["", "CE-BRI/ICEPEX-N 01264-25", "Nao possui", "Produto certificado"])
-def test_applicability_requires_area_validation(pieces, cert_text):
-    verdict, reason = ma.classify("Quebra-cabeca", pieces, cert_text)
+def test_piece_count_never_changes_the_verdict(cert_text):
+    """A regra de 500 pecas foi citada na reuniao, mas NAO aprovada.
+
+    Nenhuma contagem pode dispensar (NAO_EXIGE) nem mudar o veredito: o mesmo
+    texto de certificacao da o mesmo resultado de 60 a 1000 pecas.
+    """
+    vereditos = {ma.classify("Quebra-cabeca", p, cert_text)[0] for p in _PIECES_CASES}
+    assert len(vereditos) == 1
+    assert "NAO_EXIGE" not in vereditos
+
+
+def test_declared_exemption_wins_over_a_number_in_the_same_text():
+    """Dispensa declarada pelo seller nunca vira OK sozinha: e conferencia humana."""
+    verdict, reason = ma.classify("Puzzle", 1000, "Não possui - ver processo 004512/2024")
     assert verdict == "REVISAR"
-    assert "Aplicabilidade pendente" in reason
-    if cert_text == "":
-        assert "ausente" in reason
-    elif cert_text.startswith("CE-"):
-        assert "autenticidade nao verificada" in reason
+    assert "dispensa" in reason
 
 
-def test_legacy_threshold_does_not_approve_a_regulatory_rule():
-    assert ma.classify("Puzzle 500 pecas", 500, "", threshold=501)[0] == "REVISAR"
-    assert ma.classify("Puzzle 500 pecas", 500, "", threshold=500)[0] == "REVISAR"
+def test_reason_states_the_evidence_and_keeps_pieces_informative():
+    _, ausente = ma.classify("Puzzle", 60, "")
+    assert "não preenchida no site" in ausente
+    assert "ausente" not in ausente
+    assert "60 peças" in ausente
+    _, ok = ma.classify("Puzzle", None, "CE-BRI/ICEPEX-N 01264-25")
+    assert "autenticidade não verificada" in ok
+    assert "não informada" in ok
 
 
 def test_house_only_product_is_out_of_scope():
@@ -101,7 +138,7 @@ def test_audit_products_builds_the_row_for_persistence():
     rows = ma.audit_products([_product("Puzzle 60 pecas Aventura", cert_text="")])
     assert len(rows) == 1
     row = rows[0]
-    assert row["verdict"] == "REVISAR"
+    assert row["verdict"] == "NAO_OK"
     assert row["pieces"] == 60
     assert row["seller_id"] == "lojaparceira"
     assert row["url"].startswith("https://")
@@ -114,9 +151,12 @@ def test_summarize_always_has_the_four_verdicts():
         [
             _product("Puzzle 60 pecas", product_id="a", cert_text=""),
             _product("Puzzle 1000 pecas", product_id="b", cert_text=""),
+            _product("Puzzle 500 pecas", product_id="c", cert_text="CE-BRI/ICEPEX-N 01264-25"),
+            _product("Puzzle 2000 pecas", product_id="d", cert_text="Nao possui"),
         ]
     )
-    assert ma.summarize(rows) == {"OK": 0, "NAO_OK": 0, "REVISAR": 2, "NAO_EXIGE": 0}
+    # 1000 e 2000 pecas NAO viram NAO_EXIGE: ninguem atribui esse veredito sozinho.
+    assert ma.summarize(rows) == {"OK": 1, "NAO_OK": 2, "REVISAR": 1, "NAO_EXIGE": 0}
 
 
 def test_fetch_stops_when_a_page_returns_less_than_the_page_size(mocker):
