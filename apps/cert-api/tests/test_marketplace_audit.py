@@ -722,3 +722,75 @@ async def test_empty_filter_still_reports_when_the_run_happened(
     assert body["run_id"] == "run-1"
     assert body["summary"] == {"NAO_OK": 7}
     assert body["checked_at"] == quando.isoformat()
+
+
+# --- K9: single-flight — uma leitura do site por vez -------------------------
+
+
+@pytest.mark.asyncio
+async def test_second_audit_while_one_is_running_gets_409(test_client, api_key_headers, audit_route):
+    marketplace, thread = audit_route
+
+    first = await test_client.post("/api/marketplace/audit", headers=api_key_headers)
+    second = await test_client.post("/api/marketplace/audit", headers=api_key_headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert first.json()["run_id"] in second.json()["detail"] or "andamento" in second.json()["detail"]
+    # So UMA thread de leitura foi criada.
+    assert thread.call_count == 1
+    assert len(marketplace._running_audits) == 1
+
+
+@pytest.mark.asyncio
+async def test_new_audit_is_accepted_after_the_previous_one_finished(
+    test_client, api_key_headers, audit_route
+):
+    marketplace, thread = audit_route
+    first = await test_client.post("/api/marketplace/audit", headers=api_key_headers)
+    marketplace._running_audits[first.json()["run_id"]]["status"] = "completed"
+
+    second = await test_client.post("/api/marketplace/audit", headers=api_key_headers)
+
+    assert second.status_code == 200
+    assert thread.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_failed_audit_does_not_block_the_next_one(test_client, api_key_headers, audit_route):
+    marketplace, _thread = audit_route
+    first = await test_client.post("/api/marketplace/audit", headers=api_key_headers)
+    marketplace._running_audits[first.json()["run_id"]]["status"] = "error"
+
+    assert (await test_client.post("/api/marketplace/audit", headers=api_key_headers)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_wedged_run_stops_blocking_after_the_stale_cutoff(
+    test_client, api_key_headers, audit_route
+):
+    """Thread que nunca finalizou nao pode travar a auditoria para sempre."""
+    import time as _time
+
+    marketplace, _thread = audit_route
+    marketplace._remember(
+        "run-travado",
+        {"status": "running", "started_at": _time.time() - marketplace._STALE_RUN_SECONDS - 1},
+    )
+
+    resp = await test_client.post("/api/marketplace/audit", headers=api_key_headers)
+
+    assert resp.status_code == 200
+    assert marketplace._running_audits["run-travado"]["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_thread_that_fails_to_start_releases_the_slot(test_client, api_key_headers, audit_route):
+    marketplace, thread = audit_route
+    thread.return_value.start.side_effect = RuntimeError("can't start new thread")
+
+    resp = await test_client.post("/api/marketplace/audit", headers=api_key_headers)
+    assert resp.status_code == 503
+
+    thread.return_value.start.side_effect = None
+    assert (await test_client.post("/api/marketplace/audit", headers=api_key_headers)).status_code == 200

@@ -243,4 +243,23 @@ describe('CertMarketplacePage', () => {
     await waitFor(() => expect(screen.getByText(/Rode a auditoria/)).toBeInTheDocument());
     expect(screen.getByText(/Nenhuma auditoria executada ainda/)).toBeInTheDocument();
   });
+  // K9 — a API devolve 409 quando outra aba já está auditando.
+  it('explica que ja existe auditoria em andamento e libera o botao', async () => {
+    const user = userEvent.setup();
+    mockedStart.mockRejectedValue(
+      new Error('Erro na API: Já existe uma auditoria em andamento. Aguarde ela terminar.'),
+    );
+    render(<CertMarketplacePage />);
+    await waitFor(() => expect(mockedItems).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: /Rodar auditoria/ }));
+
+    await waitFor(() =>
+      expect(mockedToast.error).toHaveBeenCalledWith(
+        expect.stringContaining('auditoria em andamento'),
+      ),
+    );
+    expect(screen.getByRole('button', { name: /Rodar auditoria/ })).toBeEnabled();
+    expect(mockedAudit).not.toHaveBeenCalled();
+  });
 });

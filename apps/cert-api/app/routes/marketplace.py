@@ -28,12 +28,39 @@ _running_audits: dict[str, dict] = {}
 
 _MAX_TRACKED_AUDITS = 20
 
+# K9 (single-flight): o estado e em memoria e a API roda em processo unico do
+# uvicorn, entao um lock de modulo basta para "checar e reservar" de forma
+# atomica. Dois cliques ou duas abas nao podem disparar leituras concorrentes
+# contra o site da loja. Se um dia houver mais de um worker, isto precisa virar
+# advisory lock no Postgres.
+_audit_lock = threading.Lock()
+# Pior caso de uma execucao: 20 paginas x (3 tentativas x 25s + 6s de backoff)
+# ~ 27 min. Depois de 1h um run ainda "running" e thread travada, e nao pode
+# bloquear a auditoria para sempre.
+_STALE_RUN_SECONDS = 3600
+
 
 def _remember(run_id: str, state: dict) -> None:
     """Guarda o estado do run e descarta os mais antigos (memoria limitada)."""
     _running_audits[run_id] = state
     while len(_running_audits) > _MAX_TRACKED_AUDITS:
         _running_audits.pop(next(iter(_running_audits)))
+
+
+def _active_run_id(now: float) -> str | None:
+    """Id da auditoria em andamento, ou None. Chamar com `_audit_lock` tomado.
+
+    Run "running" ha mais de `_STALE_RUN_SECONDS` e marcado como erro aqui.
+    """
+    for run_id, state in _running_audits.items():
+        if state.get("status") != "running":
+            continue
+        if now - float(state.get("started_at") or 0) > _STALE_RUN_SECONDS:
+            log.error(f"Marketplace audit {run_id} travada; liberando o single-flight")
+            state.update(status="error", error="StaleRun", finished_at=now)
+            continue
+        return run_id
+    return None
 
 
 def _run_audit_worker(
@@ -79,6 +106,8 @@ def start_marketplace_audit(
         HTTPException: 400 quando `category` nao cabe na allow-list. O valor vem
             do usuario e vira PATH da URL lida pelo servidor: sem isto,
             `../../admin` ou `a?b=c` escolheriam outro endpoint do site.
+            409 quando ja ha uma auditoria em andamento (single-flight).
+            503 quando a thread de leitura nao pode ser criada.
     """
     import uuid
 
@@ -86,10 +115,26 @@ def start_marketplace_audit(
         raise HTTPException(400, "Categoria invalida")
 
     run_id = str(uuid.uuid4())
-    _remember(run_id, {"status": "running", "started_at": time.time()})
-    threading.Thread(
-        target=_run_audit_worker, args=(run_id, category, threshold), daemon=True
-    ).start()
+    with _audit_lock:
+        now = time.time()
+        active = _active_run_id(now)
+        if active:
+            raise HTTPException(
+                409, "Já existe uma auditoria em andamento. Aguarde ela terminar."
+            )
+        _remember(run_id, {"status": "running", "started_at": now})
+    try:
+        threading.Thread(
+            target=_run_audit_worker, args=(run_id, category, threshold), daemon=True
+        ).start()
+    except Exception as e:
+        # Sem thread nao ha `finally` do worker: sem isto o run ficaria
+        # "running" e bloquearia o single-flight ate o corte de 1h.
+        log.error(f"Marketplace audit {run_id} nao iniciou: {type(e).__name__}")
+        _running_audits[run_id].update(
+            status="error", error=type(e).__name__, finished_at=time.time()
+        )
+        raise HTTPException(503, "Nao foi possivel iniciar a auditoria") from None
     return {"run_id": run_id, "status": "running"}
 
 
