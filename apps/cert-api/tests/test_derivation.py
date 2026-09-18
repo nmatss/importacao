@@ -1233,6 +1233,110 @@ class TestAplicabilidadeDoLicenciamento:
         assert '"licenciamento_aplicavel"' not in inspect.getsource(postgres)
 
 
+class TestEncerradoSemPrazoDeCertificacaoNaoLibera:
+    """Falso LIBERADA: a trava vinda SO do licenciamento escondia a falta do prazo.
+
+    `derive_status_venda` bloqueava o ENCERRADO sem evidencia de venda testando
+    `trava_venda is None`. Com licenciamento futuro a trava deixa de ser None —
+    mas ela nao diz nada sobre a CERTIFICACAO, que continua sem prazo final de
+    venda conhecido. Licenca valida nao autoriza vender produto regulado com o
+    certificado encerrado.
+    """
+
+    HOJE = date(2026, 9, 18)
+    EIXO_VENDA = ("status_venda", "status_venda_reason", "comercializacao_status", "within_sale_deadline")
+
+    def _encerrado(self, **overrides) -> dict:
+        row = {
+            "sku": "PI9999Y",
+            "situacao": "Encerrado",
+            "sheet_status": "18/03/2026 - Certificado encerrado.",
+            "last_validation_status": "OK",
+            "grife": "HARRY POTTER",
+            "linx_synced_at": datetime(2026, 9, 18, 6, 0),
+        }
+        row.update(overrides)
+        return row
+
+    @pytest.mark.parametrize(
+        "certificacao",
+        [
+            {},  # sem data e sem veredito
+            {"encerramento_status": "", "sale_deadline": "", "sale_deadline_date": None},
+            {"encerramento_status": "a confirmar com o fornecedor"},  # veredito nao reconhecido
+            {"sale_deadline": "Vencido"},
+            {"sale_deadline": "Vencido", "sale_deadline_date": date(2030, 1, 1)},  # data velha no banco
+        ],
+    )
+    def test_licenciamento_futuro_nao_libera_encerrado_sem_prazo_de_certificacao(self, certificacao):
+        com_licenca = compute_status_dimensions(
+            self._encerrado(linx_fim_licenciamento=date(2030, 1, 1), **certificacao), today=self.HOJE
+        )
+        sem_licenca = compute_status_dimensions(
+            self._encerrado(grife="", **certificacao), today=self.HOJE
+        )
+        assert com_licenca["license_status"] == "VALIDO"
+        assert sem_licenca["license_status"] == "NAO_APLICAVEL"
+        assert com_licenca["status_venda"] == "BLOQUEADA"
+        assert com_licenca["comercializacao_status"] == "ENCERRADA"
+        # O criterio do pedido: mesmo resultado de quando nao ha licenciamento.
+        for campo in self.EIXO_VENDA:
+            assert com_licenca[campo] == sem_licenca[campo], campo
+
+    def test_prazo_de_certificacao_vigente_continua_liberando_com_licenca(self):
+        """A correcao nao pode bloquear quem TEM prazo de certificacao vigente."""
+        dims = compute_status_dimensions(
+            self._encerrado(
+                encerramento_status="Comerciação Permitida",
+                sale_deadline="02/03/2028",
+                sale_deadline_date=date(2028, 3, 2),
+                linx_fim_licenciamento=date(2026, 12, 31),
+            ),
+            today=self.HOJE,
+        )
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] == "2026-12-31"
+        assert dims["trava_origem"] == "licenciamento"
+        assert dims["comercializacao_status"] == "DENTRO_PRAZO"
+
+    def test_veredito_permissivo_sem_data_continua_liberando_com_licenca(self):
+        """28 SKUs tem 'Comerciacao Permitida' SEM data (caso PI7560Y)."""
+        dims = compute_status_dimensions(
+            self._encerrado(
+                encerramento_status="Comerciação Permitida",
+                linx_fim_licenciamento=date(2030, 1, 1),
+            ),
+            today=self.HOJE,
+        )
+        assert dims["status_venda"] == "LIBERADA"
+
+    def test_funcao_pura_distingue_componente_de_certificacao(self):
+        trava = date(2030, 1, 1)
+        # Trava so de licenciamento, certificacao sem prazo → bloqueia.
+        assert (
+            derivation.derive_status_venda(
+                "ENCERRADO", trava, today=self.HOJE, prazo_certificacao_conhecido=False
+            )
+            == "BLOQUEADA"
+        )
+        assert (
+            derivation.derive_status_venda(
+                "ENCERRADO", trava, today=self.HOJE, prazo_certificacao_conhecido=True
+            )
+            == "LIBERADA"
+        )
+        # ATIVO nunca depende do componente de certificacao (R3).
+        assert (
+            derivation.derive_status_venda(
+                "ATIVO", trava, today=self.HOJE, prazo_certificacao_conhecido=False
+            )
+            == "LIBERADA"
+        )
+        # Chamador antigo (sem o parametro) mantem o comportamento anterior.
+        assert derivation.derive_status_venda("ENCERRADO", trava, today=self.HOJE) == "LIBERADA"
+        assert derivation.derive_status_venda("ENCERRADO", None, today=self.HOJE) == "BLOQUEADA"
+
+
 class TestGuardasEstaticas:
     """Declaracao ausente e bug: prove que a regra esta escrita no codigo."""
 

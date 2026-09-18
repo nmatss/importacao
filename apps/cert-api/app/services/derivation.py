@@ -659,6 +659,7 @@ def derive_status_venda(
     venda_encerramento: str | None = None,
     within_sale_deadline: bool = False,
     today: date | None = None,
+    prazo_certificacao_conhecido: bool | None = None,
 ) -> str:
     """Status de venda — LIBERADA | BLOQUEADA (os dois valores que o banco aceita).
 
@@ -672,6 +673,14 @@ def derive_status_venda(
        rege `derive_venda_encerramento`).
     4. Caso contrário LIBERADA. A trava que vence HOJE ainda permite vender no dia,
        igual a `derive_within_sale_deadline`.
+
+    Args:
+        prazo_certificacao_conhecido: True quando o componente de CERTIFICAÇÃO da
+            trava existe (data real de 'PRAZO FINAL VENDA'). É ele que a regra 3
+            precisa olhar: `trava_venda` é o MÍNIMO entre certificação e
+            licenciamento, então uma licença futura preenchia a trava e fazia o
+            encerrado sem prazo nenhum de certificação sair LIBERADA. None (quem
+            chama sem informar) mantém a leitura antiga, `trava_venda is not None`.
     """
     if cert_status not in CERT_STATUS_VALUES:
         return "BLOQUEADA"
@@ -679,7 +688,9 @@ def derive_status_venda(
         return "BLOQUEADA"
     if trava_venda is not None and trava_venda < (today or _today_sp()):
         return "BLOQUEADA"
-    if cert_status != "ATIVO" and not within_sale_deadline and trava_venda is None:
+    if prazo_certificacao_conhecido is None:
+        prazo_certificacao_conhecido = trava_venda is not None
+    if cert_status != "ATIVO" and not within_sale_deadline and not prazo_certificacao_conhecido:
         return "BLOQUEADA"
     return "LIBERADA"
 
@@ -886,7 +897,16 @@ def compute_status_dimensions(
     trava, trava_origem = derive_trava_venda(
         row.get("sale_deadline_date") or sale_deadline_raw, fim_licenciamento, cs
     )
-    status_venda = derive_status_venda(cs, trava, venda, within_deadline, today)
+    # O componente de CERTIFICAÇÃO sozinho, e não a trava (que é o mínimo com o
+    # licenciamento): encerrado sem prazo final de venda conhecido não pode sair
+    # LIBERADA só porque a licença é futura. "Vencido" escrito no prazo anula a
+    # data que sobrou no banco, como já faz em `derive_within_sale_deadline`.
+    prazo_certificacao_conhecido = "vencido" not in _norm(sale_deadline_raw) and (
+        parse_data_real(row.get("sale_deadline_date")) or parse_data_real(sale_deadline_raw)
+    ) is not None
+    status_venda = derive_status_venda(
+        cs, trava, venda, within_deadline, today, prazo_certificacao_conhecido
+    )
     venda_reason = None
     # Licenciamento PENDENTE (Linx não lido, ou licenciado sem data) NÃO bloqueia
     # a venda nem torna a comercialização PENDENTE. R4: data vazia/NULL/1900 nunca
