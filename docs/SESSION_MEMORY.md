@@ -1,5 +1,17 @@
 # Session Memory
 
+## 18/09/2026 — PR 104, follow-up dos pilotos e leitura de certificação
+
+Produção `963f807` (merge do PR 104) implantada às 12:52 BRT. Health ok. Drive ativo, e-mail
+desligado, Linx write false, Follow-up cron em dry_run. Dry_run dos três pilotos: 32 alterações,
+sem `consolidationRef` no diff; apply único gravou 32; dry_run seguinte 0. Referências
+preservadas (PK219/PK220 KIOM GLOBAL LIMITED; IM076 PK212+IM076). Eventos 2903–2906.
+Leitura cert 12:58: 947 linhas, 5 pendências de fonte preservadas, 674 `linx_synced_at`,
+validade 541/133. Pendências reais: PK219 BL <90%, FIM_VENDAS ERP, versões concorrentes,
+item PK220 27.01.0007 vs 27.01.2007-228, 5 SKUs ambíguos na planilha. Documentação de
+pós-deploy alinhada ao SHA publicado. Detalhe:
+[correções do aceite](STATUS-2026-09-18-CORRECOES-ACEITE.md).
+
 ## 18/09/2026 — Correções locais e precedência aprovada
 
 Usuário confirmou integrar cadastro validado a Produtos e sinalizar conflitos. Implementados

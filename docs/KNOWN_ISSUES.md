@@ -1,13 +1,29 @@
 # Known Issues
 
+## 2026-09-18 — Publicado vs restante após PR 104
+
+**Publicado em produção `963f807`:** proteção da referência de consolidação (PR 104); Cadastro→Produtos
+já estava em `71e067f`. Follow-up dos três pilotos aplicado (32 campos); cron geral continua
+`dry_run`. Planilhas-fonte e Linx write não alterados. Eventos 2903–2906 registram consolidação
+e o item PK220 pendente.
+
+**Leitura de certificação comprovada em 12:58 BRT:** 947 linhas, 5 pendências de fonte
+preservadas (`PI4368Y`, `PI6014Y`, `100400422`, `100400423`, `050403623`), 674 leituras Linx,
+133 SKUs ainda sem `validade_certificado` na origem. Escrita ERP continua desligada.
+
+**Permanecem:** BL PK219 89,670% (<90%); versões concorrentes sem escolha canônica persistente;
+divergência real packing 27.01.0007 vs DUIMP/espelho 27.01.2007-228; trava FIM_VENDAS no ERP
+não homologada; coluna BL ausente no Follow-up; 5 SKUs de certificação para a área.
+Cadastro com certificado conflitante exige resolução explícita. Detalhamento:
+[correções do aceite](STATUS-2026-09-18-CORRECOES-ACEITE.md).
+
 ## 2026-09-18 — Atualização após correções locais
 
 Os achados abaixo são históricos do snapshot produtivo e da primeira auditoria. Correções locais
 já cobrem concordância circular, estados incompletos, tolerância monetária, alias de dupla
-certificação, SKU-data, leitura da tabela DUIMP, integração Cadastro→Produtos e UX. Não publicados.
-Permanecem: sync produtivo parado, Follow-up35 mudanças só em prévia, BL PK21989,670% (<90%),
-versões concorrentes sem escolha canônica persistente, divergência real de referência PK220 e
-propagação final de trava no ERP não homologada. Cadastro com certificado conflitante exige
+certificação, SKU-data, leitura da tabela DUIMP, integração Cadastro→Produtos e UX. Publicados
+em `963f807` / `71e067f`. Permanecem: sync produtivo, BL PK21989,670% (<90%), versões concorrentes,
+divergência real de referência PK220 e trava no ERP. Cadastro com certificado conflitante exige
 resolução explícita da área; manter fonte e pendência. Detalhamento e critérios:
 [correções do aceite](STATUS-2026-09-18-CORRECOES-ACEITE.md).
 

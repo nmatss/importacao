@@ -1,8 +1,48 @@
 # Correções do aceite de Odett e Eduarda — 18/09/2026
 
-Estado: implementação local validada; aceite operacional global ainda pendente. Base local
-`0e3434b` com alterações desta sessão e alterações preexistentes preservadas. Produção consultada
-em `6cbb9c2`. Nenhum push, deploy, reset de propriedades Linx ou alteração das planilhas foi feito.
+Estado em 18/09/2026, 12:58 BRT: produção `963f8077520218f6f195d1eba681014f7b6c3eed`
+(PR [104](https://github.com/nmatss/importacao/pull/104) integrado por merge commit). Health
+`ok`. `DOCUMENT_SOURCE=drive`, `EMAIL_INGESTION_ENABLED=false`, `FOLLOW_UP_SYNC_MODE=dry_run`,
+`LINX_WRITE_ENABLED=false` no `.env` e no runtime da cert-api. Planilhas-fonte não foram
+alteradas. Aceite operacional global permanece parcial.
+
+## Publicação PR 104 e Follow-up dos três pilotos
+
+- Merge: `gh pr merge 104 --merge` → `963f807`. CI 12/12 verde; `mergeable=MERGEABLE`,
+  `mergeStateStatus=CLEAN`.
+- Deploy: checkout `/tmp/importacao-release-20260918` limpo em `master` = `origin/master`,
+  `EXPECTED_LINX_WRITE_ENABLED=false ALLOW_SYDLE_SYNC_DEPLOY=1
+  CURL_CA_BUNDLE=/tmp/importacao-release-internal-ca-public.crt`. Backup
+  `importacao_2026-09-18_154953*`. APP_VERSION/REVISION = `963f807`.
+- Refine publicado em `sheet-columns.ts` e no `dist` do container: datas em Consolidação
+  (PKT&IMG) ficam `unavailable`, referência preservada.
+- Follow-up dry_run dos códigos PK2192607SZ / PK2202608SZ / IM0762607NB: 32 alterações
+  (13/15/4), `consolidationRef` ausente em `changes` e presente em `unavailable` com o motivo
+  de preservação. `blNumber` continua coluna ausente na fonte; BL não foi apagado.
+- Apply único autorizado após essa prévia: 32 gravadas no cadastro. Dry_run seguinte: 0
+  alterações restantes. Referências de consolidação antes/depois:
+  PK219/PK220 `KIOM GLOBAL LIMITED`; IM076 `PK2122607NB` + `IM0762607NB` (duas linhas).
+- Eventos `source_review_pending`: 287/288/297 consolidação (ids 2903/2904/2905) e 288 item
+  PK220 27.01.0007 vs 27.01.2007-228 (id 2906). Sem substituição de código.
+
+## Leitura de certificação após o deploy
+
+Uma leitura manual `POST /api/sync-sheets` (ator `postdeploy-read-963f807`) em 12:58 BRT
+completou com escrita Linx desligada. Escopo Sheets somente leitura; o módulo de atributos
+Linx só lê o ERP e grava `linx_*` no Postgres.
+
+| | 12:30 (startup pós-PR 103) | 12:58 (manual pós-PR 104) |
+| --- | ---: | ---: |
+| linhas de planilha | 947 (566+381) | 947 |
+| pendências de fonte | 5 | 5, mesmos números de certificado |
+| produtos / `linx_synced_at` | 674 / 674 | 674 / 674 |
+| `validade_certificado` preenchida / nula | 541 / 133 | 541 / 133 |
+| `PENDENTE_CADASTRO` / `cert_status=PENDENTE` | 0 / 0 | 0 / 0 |
+
+Pendências preservadas: `PI4368Y`, `PI6014Y`, `100400422`, `100400423` (vínculo ambíguo);
+`050403623` (marca vs Encerramentos, sem linha ativa). Leitura Linx: Puket 397, Imaginarium 277,
+erros `[]`. O aborto horário de 11:20 (`Vinculo de certificacao ambiguo` / etapa Linx não
+executada) não é mais o caminho vigente: startup 12:30 e hourly 12:20 já tinham 947/5 + 674.
 
 ## Decisão aprovada: cadastro integrado a Produtos
 
@@ -86,9 +126,9 @@ apps/cert-api/tests -q`: 1.207 aprovados, nenhum ignorado, incluindo os bancos d
 
 | Prioridade | Pendência                                            | Critério de fechamento                                                                                                                                  |
 | ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ALTO       | Publicação das correções                             | Push explicitamente autorizado; master limpo/sincronizado; `scripts/deploy.sh`; smoke e reconciliação pós-deploy                                        |
-| ALTO       | Sync de certificação parado no snapshot produtivo    | Publicar, executar leitura e comprovar sucesso/pendências por SKU; preservar conflitos                                                                  |
-| ALTO       | Follow-up em dry_run                                 | Prévia medida: 35 alterações nos três pilotos (14/16/5); revisar/aplicar e conferir dados/relatórios; coluna BL ausente na fonte não autoriza apagar BL |
+| ALTO       | Publicação das correções                             | **Publicado** em `963f807` (PR 104). Cadastro→Produtos já estava em `71e067f`. Smoke e follow-up dos três pilotos feitos.                              |
+| ALTO       | Sync de certificação parado no snapshot produtivo    | **Leitura comprovada** em 12:58: 947 linhas, 5 pendências preservadas, 674 leituras Linx, escrita ERP desligada. Restam 133 SKUs sem validade na fonte e a trava FIM_VENDAS. |
+| ALTO       | Follow-up em dry_run                                 | **Aplicado nos três pilotos** (32 campos). Cron geral permanece `dry_run`. Coluna BL ausente na fonte; não apagar BL. Pendência de datas de consolidação. |
 | ALTO       | Trava final de venda no ERP não homologada           | Demonstrar menor data válida entre fim de venda da certificação e licenciamento, com nulos/sentinelas e dupla certificação                              |
 | ALTO       | PK219 BL abaixo de 90%                               | Extração/verificação suficiente sem relaxar regra ou inventar campos                                                                                    |
 | ALTO       | Versões concorrentes em comparativo/Registro         | Área confirmar fontes vigentes; seleção temporária não resolve escolha persistente                                                                      |
@@ -103,20 +143,10 @@ de planilha que contém somente certificação.
 
 ## Retomada e publicação
 
-Revisar o diff local com os novos arquivos antes de montar release. Preservar alterações de outras
-execuções e excluir auxiliares temporários de auditoria. A migration de proveniência interna
-`20260918_encerramento_provenance.sql` integra o conjunto local; a composição Cadastro→Produtos
-não adiciona migration. Publicação deve seguir o gate do AGENTS.md, mantendo escrita Linx
-desligada até homologação específica. Após deploy, repetir pilotos e reconciliar antes/depois.
+PR 104, o follow-up dos três pilotos e a leitura de certificação já estão em `963f807`. Escrita
+Linx permanece desligada. Próximo foco: BL PK219 abaixo de 90%, trava FIM_VENDAS no ERP, versões
+concorrentes no comparativo/Registro, a divergência de item PK220 e as 5 pendências de fonte
+da planilha de certificação.
+para Odett/Eduarda.
 
 Não declarar “100% integrado” ou “Finalizado” enquanto as pendências acima permanecerem.
-
-## Decisões confirmadas durante a publicação
-
-O usuário autorizou push/integração/deploy e confirmou que a divergência PK220 fica pendente
-para Odett/Eduarda. Também determinou preservar a referência de consolidação e sinalizar as
-datas dessa coluna como pendência. O parser Follow-up passou a recusar datas nesse campo de
-referência, mantendo os demais campos disponíveis para sincronização. Fontes não alteradas.
-A revisão integrada incorporou `c1b80ad` (licenciamento), com 1.234 testes Python e 442 web
-aprovados, além de 2.108 testes API antes desta proteção adicional. PR103/71e067f publicado
-primeiro; esta proteção complementar segue publicação e validação próprias.

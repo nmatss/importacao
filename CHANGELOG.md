@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-18 — Evidência de produção do aceite
+- Documenta SHA 963f807, Follow-up dos três pilotos (32 campos, referência de consolidação preservada) e leitura de certificação 947/5/674 com Linx write desligado.
+- Pendências restantes: BL PK219 <90%, FIM_VENDAS, versões concorrentes, item PK220, 5 SKUs ambíguos.
+
 ## 2026-09-18 — Preservação da referência de consolidação
 
 - Datas na coluna de referência da consolidação ficam como pendência de revisão; a sync

@@ -1,5 +1,11 @@
 # Certificação — sync da planilha parado de 12/09 a 18/09/2026
 
+Atualização 18/09 12:58 BRT: produção `963f807`. O aborto global por vínculo ambíguo
+não é mais o caminho vigente. Leitura manual pós-PR 104: 947 linhas, 5 pendências
+preservadas, 674 `linx_synced_at`, `LINX_WRITE_ENABLED=false`. Detalhe operacional em
+[STATUS-2026-09-18-CORRECOES-ACEITE](STATUS-2026-09-18-CORRECOES-ACEITE.md). O texto
+abaixo descreve a quarentena e a causa raiz medidas antes dessa comprovação.
+
 Retomada da frente de certificação em 18/09/2026, a partir de três sinais do time:
 
 - Lilian (Projetos), 17/09 09:53: "Não está trazendo o relatório" — print da tela Produtos com
@@ -8,7 +14,8 @@ Retomada da frente de certificação em 18/09/2026, a partir de três sinais do 
   lista de produtos com as respectivas datas, sem depender da TI.
 - Elisangela (Linx), 16/09: propriedades Imaginarium 00106/00107 e Puket 00224/00225.
 
-Branch local: `fix/cert-sync-quarentena-2026-09-18`. Nada publicado nem implantado nesta rodada.
+A quarentena e as correções de sync por SKU já estão no SHA publicado `963f807`.
+O parágrafo abaixo é o registro histórico da retomada; não descreve o estado atual da produção.
 
 ## 1. O que estava acontecendo (fatos medidos em produção, somente leitura)
 
