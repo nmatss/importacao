@@ -89,7 +89,12 @@ function isOperatePath(path: string): boolean {
     /^\/cert-api\/api\/certificates\/[^/%]+\/retry-linx$/.test(path) ||
     // Vínculo em massa de SKUs ao certificado: mesma rotina do cadastro, com
     // prévia obrigatória (`dry_run`) antes de qualquer gravação no Linx.
-    /^\/cert-api\/api\/certificates\/[^/%]+\/items$/.test(path)
+    /^\/cert-api\/api\/certificates\/[^/%]+\/items$/.test(path) ||
+    // Carga em lote `SKU;data` do mesmo certificado: mesma rotina do vínculo e do
+    // encerramento de item que o analista já opera, com prévia (`dry_run`)
+    // obrigatória e erro por linha. Segmento LITERAL: `/items/<sku>` por POST
+    // continua caindo em cert.admin.
+    /^\/cert-api\/api\/certificates\/[^/%]+\/items\/batch$/.test(path)
   );
 }
 

@@ -133,6 +133,19 @@ describe('cert-api gateway access policy', () => {
     expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/items/SKU-1')).toBe(
       'cert.admin',
     );
+    // Lote `SKU;data`: só o segmento literal, sem `%` no id e sem subpath.
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/items/batch')).toBe(
+      'cert.operate',
+    );
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/a%2Fb/items/batch')).toBe(
+      'cert.admin',
+    );
+    expect(
+      requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/items/batch/extra'),
+    ).toBe('cert.admin');
+    expect(requiredCertApiScope('PUT', '/cert-api/api/certificates/cert-1/items/batch')).toBe(
+      'cert.admin',
+    );
     expect(requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items')).toBe(
       'cert.admin',
     );
@@ -191,6 +204,7 @@ describe('cert-api gateway access policy', () => {
     ['POST', '/cert-api/api/certificates'],
     ['POST', '/cert-api/api/certificates/cert-1/retry-linx'],
     ['POST', '/cert-api/api/certificates/cert-1/items'],
+    ['POST', '/cert-api/api/certificates/cert-1/items/batch'],
     ['DELETE', '/cert-api/api/certificates/cert-1/items/SKU-1'],
     ['PATCH', '/cert-api/api/certificates/cert-1/items/050404509/restriction'],
     ['POST', '/cert-api/api/sync-sheets'],
