@@ -93,4 +93,6 @@ def test_export_preserves_unknown_snapshot_despite_live_license(mocker, tmp_path
         [{"sku": "SKU", "situacao": "Ativo", "linx_fim_licenciamento": None}], today=date(2026, 9, 12)
     )
     sheet = openpyxl.load_workbook(output)["Produtos"]
-    assert sheet.cell(8, _header_index(sheet, "Status Licenciamento")).value == "PENDENTE"
+    # So o literal mudou (a celula agora traz o rotulo, nao o codigo cru). A
+    # intencao e a mesma: snapshot desconhecido NAO vira "Valido" pela trava viva.
+    assert sheet.cell(8, _header_index(sheet, "Status Licenciamento")).value == "Pendente de validacao"
