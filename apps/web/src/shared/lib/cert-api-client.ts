@@ -217,14 +217,30 @@ export interface CertReportResult {
   name: string;
   brand: string;
   status: string;
+  /** Similaridade 0..1 (`compare_cert_texts`), nao percentual. */
   score: number | null;
   url: string | null;
+  actual_cert_text?: string | null;
+  certification_type?: string | null;
+  expected_cert_text?: string | null;
+  error?: string | null;
   [key: string]: unknown;
 }
 
+/**
+ * Espelha o JSON gravado por `_run_validation` (`app/routes/certifications.py`)
+ * e devolvido cru por `GET /api/reports/{filename}/data`: `run_id`, `date`,
+ * `summary` e `products`. A lista vem em `products`; `results` e o nome de um
+ * formato antigo que `report_service.generate_validation_report_xlsx` tambem aceita. Leia
+ * sempre por `certReportItems` para nao repetir o defeito da tabela vazia.
+ */
 export interface CertReportData {
-  results: CertReportResult[];
-  summary: {
+  run_id?: string;
+  date?: string;
+  products?: CertReportResult[];
+  /** Formato legado; o backend atual nunca grava esta chave. */
+  results?: CertReportResult[];
+  summary?: {
     total: number;
     ok: number;
     missing: number;
@@ -233,6 +249,17 @@ export interface CertReportData {
     [key: string]: unknown;
   };
   [key: string]: unknown;
+}
+
+/**
+ * Itens de um relatorio de validacao, na mesma ordem de precedencia do backend
+ * (`products`, depois `results`). Valor que nao e lista vira lista vazia para a
+ * tela nao quebrar com arquivo corrompido.
+ */
+export function certReportItems(data: CertReportData | null | undefined): CertReportResult[] {
+  if (Array.isArray(data?.products)) return data.products;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
 }
 
 /**
