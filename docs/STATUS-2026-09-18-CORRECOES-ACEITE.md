@@ -110,3 +110,13 @@ não adiciona migration. Publicação deve seguir o gate do AGENTS.md, mantendo 
 desligada até homologação específica. Após deploy, repetir pilotos e reconciliar antes/depois.
 
 Não declarar “100% integrado” ou “Finalizado” enquanto as pendências acima permanecerem.
+
+## Decisões confirmadas durante a publicação
+
+O usuário autorizou push/integração/deploy e confirmou que a divergência PK220 fica pendente
+para Odett/Eduarda. Também determinou preservar a referência de consolidação e sinalizar as
+datas dessa coluna como pendência. O parser Follow-up passou a recusar datas nesse campo de
+referência, mantendo os demais campos disponíveis para sincronização. Fontes não alteradas.
+A revisão integrada incorporou `c1b80ad` (licenciamento), com 1.234 testes Python e 442 web
+aprovados, além de 2.108 testes API antes desta proteção adicional. PR103/71e067f publicado
+primeiro; esta proteção complementar segue publicação e validação próprias.

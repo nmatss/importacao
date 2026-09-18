@@ -123,6 +123,26 @@ function linha(headers: string[], values: string[]) {
 }
 
 describe('sheet-columns — mapeamento por cabecalho', () => {
+  it.each(['12/09/2026', '17/09/2026', '2026-09-12', '12.09.2026'])(
+    'keeps dates out of the consolidation reference and reports a pending source: %s',
+    (value) => {
+      const result = readField(
+        indexRowByHeader(['Consolidação (PKT&IMG)'], [value]),
+        'consolidationRef',
+      );
+      expect(result.reading).toMatchObject({ available: false, raw: value });
+      if (!result.reading.available)
+        expect(result.reading.reason).toContain('referência preservada');
+    },
+  );
+
+  it('still accepts a real multi-process consolidation reference', () => {
+    const value = 'PK2122607NB\nIM0762607NB';
+    expect(
+      readField(indexRowByHeader(['Consolidação (PKT&IMG)'], [value]), 'consolidationRef').reading,
+    ).toEqual({ available: true, value });
+  });
+
   it('usa ETA Final/Realizado e NUNCA ETA Previsto Medio', () => {
     const diff = diffProcessAgainstRow(processo287(), linha(HEADERS, ROW_219));
     const porCampo = new Map(diff.changes.map((change) => [change.field, change]));
@@ -183,6 +203,22 @@ describe('sheet-columns — mapeamento por cabecalho', () => {
 });
 
 describe('sheet-sync — indisponivel nunca vira 0 nem apaga', () => {
+  it('preserves the current consolidation reference and exposes the date as pending', () => {
+    const process = { ...processo287(), consolidationRef: 'PK2122607NB\nIM0762607NB' };
+    const result = diffProcessAgainstRow(
+      process,
+      linha(['Consolidação (PKT&IMG)'], ['17/09/2026']),
+    );
+    expect(result.changes.some((change) => change.field === 'consolidationRef')).toBe(false);
+    expect(result.unavailable).toContainEqual(
+      expect.objectContaining({
+        field: 'consolidationRef',
+        reason: expect.stringContaining('pendente de revisão'),
+      }),
+    );
+    expect(process.consolidationRef).toBe('PK2122607NB\nIM0762607NB');
+  });
+
   it('mantem o FOB anterior quando a celula esta com #ERROR!', () => {
     const values = [...ROW_219];
     values[7] = '#ERROR!';
