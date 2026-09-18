@@ -1,5 +1,13 @@
 # Session Memory
 
+## 18/09/2026 — Decisões profissionais (fail-closed)
+
+Login sem `ALLOWED_DOMAIN` recusa; produção não sobe sem a lista. Webhook do Chat
+restrito a `chat.googleapis.com`. Holds humanos inalterados. Sem Linx write, sem
+merge de UX leftover nem da árvore cert-sync suja. Sem push/deploy desta
+hardening até autorização. ADR 0007. Detalhe:
+[decisões profissionais](STATUS-2026-09-18-DECISOES-PROFISSIONAIS.md).
+
 ## 18/09/2026 — PR 104, follow-up dos pilotos e leitura de certificação
 
 Produção `963f807` (merge do PR 104) implantada às 12:52 BRT. Health ok. Drive ativo, e-mail

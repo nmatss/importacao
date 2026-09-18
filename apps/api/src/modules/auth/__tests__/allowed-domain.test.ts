@@ -32,7 +32,7 @@ describe('parseAllowedDomains()', () => {
     ]);
   });
 
-  it('lista vazia nao restringe (compatível com ALLOWED_DOMAIN ausente)', () => {
+  it('lista vazia permanece vazia (ALLOWED_DOMAIN ausente nao vira dominio)', () => {
     expect(parseAllowedDomains('')).toEqual([]);
     expect(parseAllowedDomains('   ,  ; ')).toEqual([]);
   });
@@ -86,8 +86,11 @@ describe('evaluateCorporateAccount()', () => {
     expect(result.emailSuffixOk).toBe(false);
   });
 
-  it('sem allowlist, nao restringe', () => {
-    expect(evaluateCorporateAccount('alguem@gmail.com', 'gmail.com', []).allowed).toBe(true);
+  it('sem allowlist, recusa qualquer conta', () => {
+    expect(evaluateCorporateAccount('alguem@gmail.com', 'gmail.com', []).allowed).toBe(false);
+    expect(evaluateCorporateAccount('ana@grupounico.com', 'grupounico.com', []).allowed).toBe(
+      false,
+    );
   });
 });
 
@@ -101,6 +104,12 @@ describe('formatAllowedDomainsMessage()', () => {
   it('lista os dominios aceitos', () => {
     expect(formatAllowedDomainsMessage(['grupounico.com', 'imaginarium.com'])).toBe(
       'Acesso restrito a contas @grupounico.com ou @imaginarium.com',
+    );
+  });
+
+  it('nao anuncia allowlist vazia como aberta', () => {
+    expect(formatAllowedDomainsMessage([])).toBe(
+      'Acesso restrito a contas corporativas do Grupo Unico',
     );
   });
 });

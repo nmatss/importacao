@@ -31,8 +31,11 @@ export function evaluateCorporateAccount(
   hd: string | undefined | null,
   allowedDomains: string[],
 ): { allowed: boolean; hostedDomainOk: boolean; emailSuffixOk: boolean } {
+  // Deny by default. An empty allowlist used to admit any Google account;
+  // production must set ALLOWED_DOMAIN, and local/test without it must not
+  // silently open the tenant.
   if (allowedDomains.length === 0) {
-    return { allowed: true, hostedDomainOk: true, emailSuffixOk: true };
+    return { allowed: false, hostedDomainOk: false, emailSuffixOk: false };
   }
 
   const hostedDomainOk = hd == null || hd === '' || allowedDomains.includes(hd.toLowerCase());

@@ -207,46 +207,44 @@ export const authService = {
       throw new UnauthorizedError('Token Google inválido');
     }
 
-    if (ALLOWED_DOMAINS.length > 0) {
-      // `hd` (hosted domain) e o claim que o Google emite para conta Workspace.
-      // A checagem e CONDICIONAL DE PROPOSITO — nao endureca para exigir a
-      // presenca do claim sem entender o custo:
-      //
-      // - `hd` PRESENTE e fora da allowlist => recusa dura. Este e o caso que
-      //   importa: conta de OUTRA organizacao tentando entrar.
-      // - `hd` AUSENTE => segue para as barreiras seguintes (sufixo do e-mail,
-      //   cadastro local e grupos do Google), sem recusar por isso.
-      //
-      // Exigir a presenca do claim tem modo de falha catastrofico e binario: se
-      // o Google parar de emitir `hd` (mudanca de formato do token, conta que
-      // nao e Workspace), NINGUEM entra, e a recuperacao exige mexer em
-      // ALLOWED_DOMAIN no SOPS e redeployar no meio do incidente de login.
-      //
-      // ALLOWED_DOMAIN aceita lista (dominio primario + marcas). Conta
-      // @imaginarium.com no mesmo Workspace chega com hd=grupounico.com; os
-      // dois precisam estar na lista, senao o sufixo sozinho ou o hd sozinho
-      // derruba a colaboradora.
-      const { allowed, hostedDomainOk, emailSuffixOk } = evaluateCorporateAccount(
-        payload.email,
-        payload.hd,
-        ALLOWED_DOMAINS,
-      );
+    // `hd` (hosted domain) e o claim que o Google emite para conta Workspace.
+    // A checagem do claim e CONDICIONAL DE PROPOSITO — nao endureca para exigir
+    // a presenca sem entender o custo:
+    //
+    // - `hd` PRESENTE e fora da allowlist => recusa dura. Este e o caso que
+    //   importa: conta de OUTRA organizacao tentando entrar.
+    // - `hd` AUSENTE => segue para as barreiras seguintes (sufixo do e-mail,
+    //   cadastro local e grupos do Google), sem recusar por isso.
+    //
+    // Exigir a presenca do claim tem modo de falha catastrofico e binario: se
+    // o Google parar de emitir `hd` (mudanca de formato do token, conta que
+    // nao e Workspace), NINGUEM entra, e a recuperacao exige mexer em
+    // ALLOWED_DOMAIN no SOPS e redeployar no meio do incidente de login.
+    //
+    // ALLOWED_DOMAIN aceita lista (dominio primario + marcas). Conta
+    // @imaginarium.com no mesmo Workspace chega com hd=grupounico.com; os
+    // dois precisam estar na lista, senao o sufixo sozinho ou o hd sozinho
+    // derruba a colaboradora. Lista vazia recusa todo mundo (fail-closed).
+    const { allowed, hostedDomainOk, emailSuffixOk } = evaluateCorporateAccount(
+      payload.email,
+      payload.hd,
+      ALLOWED_DOMAINS,
+    );
 
-      if (!allowed) {
-        // Dominio de fora: guarda so o dominio, nunca o endereco completo. E
-        // pessoa que nao e nossa, e o dominio ja basta para investigar.
-        logger.warn(
-          {
-            hd: payload.hd ?? null,
-            dominio: domainOf(payload.email),
-            hostedDomainOk,
-            emailSuffixOk,
-          },
-          'Google: conta fora do dominio corporativo',
-        );
-        await recordLoginFailure(null, 'wrong_domain', domainOf(payload.email));
-        throw new ForbiddenError(formatAllowedDomainsMessage(ALLOWED_DOMAINS));
-      }
+    if (!allowed) {
+      // Dominio de fora: guarda so o dominio, nunca o endereco completo. E
+      // pessoa que nao e nossa, e o dominio ja basta para investigar.
+      logger.warn(
+        {
+          hd: payload.hd ?? null,
+          dominio: domainOf(payload.email),
+          hostedDomainOk,
+          emailSuffixOk,
+        },
+        'Google: conta fora do dominio corporativo',
+      );
+      await recordLoginFailure(null, 'wrong_domain', domainOf(payload.email));
+      throw new ForbiddenError(formatAllowedDomainsMessage(ALLOWED_DOMAINS));
     }
 
     let [user] = await db.select().from(users).where(eq(users.email, payload.email)).limit(1);

@@ -120,11 +120,14 @@ export async function resolveGoogleChatWebhook(): Promise<WebhookResolution> {
   return { url: null, source: null };
 }
 
-/** Um valor configurado ainda pode ser lixo. https e o minimo verificavel. */
+const GOOGLE_CHAT_WEBHOOK_HOST = 'chat.googleapis.com';
+
+/** HTTPS no host oficial do Chat. Qualquer outro destino e SSRF em potencia. */
 export function isUsableWebhookUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   try {
-    return new URL(url).protocol === 'https:';
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && parsed.hostname === GOOGLE_CHAT_WEBHOOK_HOST;
   } catch {
     return false;
   }

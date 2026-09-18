@@ -11,6 +11,7 @@ import {
   getOperationalRecipientSettings,
   normalizeEmailList,
 } from './operational-recipients.js';
+import { isUsableWebhookUrl } from '../alerts/delivery.service.js';
 
 const SMTP_KEYS = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_from'] as const;
 const SMTP_ENV: Record<string, string> = {
@@ -59,6 +60,15 @@ const DEDICATED_ROUTE_BY_KEY: Record<string, string> = {
   ...Object.fromEntries(INTEGRATION_KEYS.map((key) => [key, '/api/settings/integrations'])),
   ...Object.fromEntries(OPERATIONAL_RECIPIENT_KEYS.map((key) => [key, '/api/settings/recipients'])),
 };
+
+function webhookUrlFromSettingValue(value: unknown): string | null {
+  if (typeof value === 'string') return value.trim() || null;
+  if (typeof value === 'object' && value !== null && 'url' in value) {
+    const nested = (value as { url: unknown }).url;
+    return typeof nested === 'string' ? nested.trim() || null : null;
+  }
+  return null;
+}
 
 function rejectionForGenericWrite(key: string): string | null {
   const dedicated = DEDICATED_ROUTE_BY_KEY[key];
@@ -158,6 +168,16 @@ export const settingsController = {
       if (rejection) return sendError(res, rejection, 400);
 
       const { value, description } = req.body;
+      if (req.params.key === 'google_chat_webhook_url') {
+        const url = webhookUrlFromSettingValue(value);
+        if (url && !isUsableWebhookUrl(url)) {
+          return sendError(
+            res,
+            'Webhook do Google Chat inválido: use uma URL HTTPS de chat.googleapis.com.',
+            400,
+          );
+        }
+      }
       const setting = await settingsService.set(req.params.key, value, description);
       sendSuccess(res, setting);
     } catch (error: unknown) {

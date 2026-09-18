@@ -31,10 +31,13 @@ Ultima atualizacao: 2026-08-29
   passava do limite.
 - Login Google exige `email_verified`; o claim `hd`, quando presente, tem de
   estar na allowlist de `ALLOWED_DOMAIN` (dominio unico ou lista separada por
-  virgula). A checagem de `hd` e CONDICIONAL de proposito — ver o comentario
-  em `modules/auth/service.ts` antes de endurecer. Contas ja cadastradas e
+  virgula). Allowlist vazia recusa o login; em producao a API nao sobe sem a
+  lista. A checagem de `hd` continua CONDICIONAL quanto a presenca do claim —
+  ver o comentario em `modules/auth/service.ts`. Contas ja cadastradas e
   ativas em Configuracoes > Usuarios entram sem o grupo Google; o grupo
   continua auto-provisionando quem ainda nao foi cadastrado.
+- Webhook do Google Chat so e utilizavel em `https://chat.googleapis.com`
+  (entrega e gravacao em settings).
 - Admin nao consegue se auto-desativar nem se rebaixar, e o ultimo admin ativo
   e protegido.
 - Metricas Prometheus rotulam pela rota REGISTRADA, nao pelo path bruto: path

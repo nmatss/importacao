@@ -11,6 +11,7 @@ import { healthRoutes } from './modules/health/routes.js';
 import { db } from './shared/database/connection.js';
 import { metricsMiddleware, register, safeTokenEquals } from './shared/metrics/index.js';
 import { openapiSpec } from './docs/openapi.js';
+import { parseAllowedDomains } from './modules/auth/allowed-domain.js';
 
 const app = express();
 
@@ -36,6 +37,15 @@ if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
     'CORS_ORIGIN environment variable is required in production. Refusing to start with localhost fallback.',
   );
   throw new Error('CORS_ORIGIN must be set in production');
+}
+if (
+  process.env.NODE_ENV === 'production' &&
+  parseAllowedDomains(process.env.ALLOWED_DOMAIN || '').length === 0
+) {
+  logger.fatal(
+    'ALLOWED_DOMAIN environment variable is required in production. Refusing to start with an open tenant.',
+  );
+  throw new Error('ALLOWED_DOMAIN must be set in production');
 }
 app.use(
   cors({
