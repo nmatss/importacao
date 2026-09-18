@@ -231,7 +231,9 @@ def test_products_report_mirrors_panel_status_columns(mocker, tmp_path):
         return ws.cell(row=8, column=_header_index(ws, label)).value
 
     assert cell("Status Certificacao") == "Encerrado"
-    assert cell("Status E-commerce") == "Conforme"
+    # T3 (18/09/2026): licenca vencida (31/01/2026) + produto no site = nao conforme,
+    # como a docstring de derive_site_status ja prometia. Antes afirmava "Conforme".
+    assert cell("Status E-commerce") == "Nao conforme"
     assert cell("Status Licenciamento") == "Vencido"
     assert cell("Fim Licenciamento (Linx)") == "31/01/2026"
     assert cell("Estoque CD Disponivel") == 10
