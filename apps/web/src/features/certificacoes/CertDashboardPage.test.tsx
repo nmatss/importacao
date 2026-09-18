@@ -17,6 +17,7 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
 
 import {
   checkCertApiHealth,
+  upcomingLicenseFilters,
   fetchCertExpired,
   fetchCertProducts,
   fetchCertReports,
@@ -65,6 +66,23 @@ describe('CertDashboardPage', () => {
     mockedProducts.mockResolvedValue({ products: [] });
     mockedExpired.mockResolvedValue({ products: [] });
     mockedHealth.mockResolvedValue({ connected: true, latencyMs: 12 });
+  });
+
+  it('oferece consultas distintas de licenciamento sem inventar contadores', async () => {
+    mockedStats.mockResolvedValue({ total_products: 0, total_expired: 0, by_brand: [] });
+    renderPage();
+    const link = await screen.findByRole('link', {
+      name: 'Licenciamentos a vencer nos próximos 30 dias',
+    });
+    expect(
+      Object.fromEntries(
+        new URL(link.getAttribute('href')!, 'https://example.invalid').searchParams,
+      ),
+    ).toEqual(upcomingLicenseFilters());
+    expect(screen.getByRole('link', { name: 'Licenciamentos vencidos' })).toHaveAttribute(
+      'href',
+      '/certificacoes/produtos?license_status=VENCIDO',
+    );
   });
 
   // ── Item 1 ──────────────────────────────────────────────────────────────

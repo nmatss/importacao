@@ -11,6 +11,15 @@
 - Corrige estados de erro, rascunho de processo, filtros e acessibilidade nos fluxos auditados.
 - Evidências e bloqueios operacionais em `docs/STATUS-2026-09-18-CORRECOES-ACEITE.md`.
 
+## 2026-09-18 — Consulta de vencimentos do licenciamento Linx
+
+- Filtros inclusivos de vencimento e exportação do mesmo conjunto da listagem,
+  com atalhos para licenças vencidas/próximas do vencimento, SKU e descrição.
+- Preserva as 29 colunas do Excel e informa origem e atualidade da leitura.
+- Protege o snapshot contra propriedades de licença ambíguas, datas ilegíveis
+  e produtos não encontrados. Licenciamento permanece somente leitura no ERP.
+- Evidências: `docs/STATUS-2026-09-18-LICENCIAMENTO-LINX-RELATORIOS.md`.
+
 ## 2026-09-18 — Retomada da certificação (local, não implantada)
 
 - Fortalece escrita Linx: bloqueia cardinalidade inesperada, atualiza pela chave completa e

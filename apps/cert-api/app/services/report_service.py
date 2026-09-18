@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -109,6 +110,32 @@ def _fmt_br(value: object) -> str:
     return data.strftime("%d/%m/%Y") if data else ""
 
 
+def _licenciamento_meta_line(rows: list[dict]) -> str:
+    """Identify the snapshot behind licensing dates without implying a live read."""
+    timestamps = []
+    for row in rows:
+        value = row.get("linx_synced_at")
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value)
+            except ValueError:
+                value = None
+        if isinstance(value, datetime):
+            # PostgreSQL timestamptz is aware; legacy naive snapshots use UTC.
+            timestamps.append(value.replace(tzinfo=UTC) if value.tzinfo is None else value)
+    source = "Licenciamento: Linx (somente leitura)"
+    if not rows:
+        return f"{source}; nenhum produto no filtro"
+    if not timestamps:
+        return f"{source}; data da leitura nao informada"
+    oldest = min(timestamps).astimezone(ZoneInfo("America/Sao_Paulo"))
+    suffix = f"; leitura mais antiga: {oldest:%d/%m/%Y %H:%M} (Sao Paulo)"
+    missing = len(rows) - len(timestamps)
+    if missing:
+        suffix += f"; {missing} produto(s) sem data de leitura"
+    return source + suffix
+
+
 def _fetch_stock_map() -> dict[str, dict]:
     """Fetch aggregated stock totals from cert_stock, per SKU.
 
@@ -180,7 +207,9 @@ def _fetch_travas_faturamento(rows: list[dict]) -> dict[str, dict[str, str | Non
         prop_cert = cfg["prop_validade_certificado"]
         prop_lic = cfg["prop_vencimento_licenciamento"]
         try:
-            props = fetch_produto_propriedades(brand, [prop_cert, prop_lic], skus)
+            props = fetch_produto_propriedades(
+                brand, [prop_cert, prop_lic], skus, strict_prop_codes=[prop_lic]
+            )
         except Exception as e:
             log.warning(f"Trava de faturamento indisponivel para '{brand}': {e}")
             for sku in skus:
@@ -405,7 +434,7 @@ def generate_products_report(
     ws.append(["Relatorio de Produtos - Certificacoes"])
     ws.merge_cells("A1:J1")
     ws["A1"].font = Font(bold=True, size=14, color="059669")
-    ws.append([f"Gerado em: {now.strftime('%d/%m/%Y %H:%M')}"])
+    ws.append([f"Gerado em: {now.strftime('%d/%m/%Y %H:%M')} UTC | {_licenciamento_meta_line(rows)}"])
     ws.append([f"Total: {len(rows)} produtos"])
     ws.append([_safe_text(sync_warning)] if sync_warning else [])
     ws.append(

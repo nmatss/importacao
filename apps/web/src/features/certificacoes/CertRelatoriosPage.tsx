@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   certApiFetch,
+  certProductQuery,
+  upcomingLicenseFilters,
+  type CertProductFilters,
   downloadCertApiResource,
   downloadCertReport,
   fetchCertProducts,
@@ -62,6 +65,24 @@ const EXPORT_TYPES = [
     params: { status: 'EXPIRED' },
   },
   {
+    id: 'licenses-expired',
+    label: 'Licenciamentos vencidos',
+    description: 'SKU, descrição e prazo vencido na última leitura do Linx; somente leitura',
+    icon: CalendarX2,
+    color: 'from-pink-500 to-pink-600',
+    shadow: 'shadow-sm',
+    params: { license_status: 'VENCIDO' },
+  },
+  {
+    id: 'licenses-upcoming',
+    label: 'Licenciamentos a vencer em 30 dias',
+    description: 'De hoje aos próximos 29 dias, inclusive, no fuso de São Paulo; fonte Linx',
+    icon: CalendarX2,
+    color: 'from-amber-500 to-amber-600',
+    shadow: 'shadow-sm',
+    params: {},
+  },
+  {
     id: 'stock',
     label: 'Estoque Detalhado (WMS + E-commerce)',
     description: 'Estoque aberto por localizacao: CD Biguacu (Picking, Armazem, etc) + Extrema MG',
@@ -93,8 +114,8 @@ function formatSize(bytes: number): string {
 /**
  * Quantos produtos a exportacao vai trazer, SEM mudar o contrato do backend:
  * `/api/reports/export` e `/api/products` montam o mesmo WHERE sobre
- * `cert_products` (marca normalizada + status, com EXPIRED virando
- * `is_expired`), entao o `total` da listagem e a contagem de linhas da planilha.
+ * `cert_products` e os mesmos filtros de marca, status e datas de licenciamento;
+ * o `total` da listagem e a contagem de linhas da planilha naquele snapshot.
  *
  * Devolve `null` quando nao da para saber — o estoque detalhado sai de
  * `cert_stock` e nao tem endpoint de contagem; a falha da consulta tambem cai
@@ -102,14 +123,11 @@ function formatSize(bytes: number): string {
  */
 async function countExportRows(
   exportType: (typeof EXPORT_TYPES)[number],
-  brand: string,
+  filters: CertProductFilters,
 ): Promise<number | null> {
   if ('exportUrl' in exportType) return null;
   try {
-    const filters: { brand?: string; status?: string; per_page: number } = { per_page: 1 };
-    if (brand) filters.brand = brand;
-    if ('status' in exportType.params) filters.status = exportType.params.status;
-    const { total } = await fetchCertProducts(filters);
+    const { total } = await fetchCertProducts({ ...filters, per_page: 1 });
     return typeof total === 'number' ? total : null;
   } catch {
     return null;
@@ -149,12 +167,14 @@ export default function CertRelatoriosPage() {
     setEmptyExportNotice(null);
     // Dispara junto com o download; a contagem nunca bloqueia nem derruba a
     // exportacao (countExportRows engole a propria falha).
-    const rowCountPromise = countExportRows(exportType, brandFilter);
+    const params: CertProductFilters = {
+      ...exportType.params,
+      ...(exportType.id === 'licenses-upcoming' ? upcomingLicenseFilters() : {}),
+      ...(brandFilter ? { brand: brandFilter } : {}),
+    };
+    const rowCountPromise = countExportRows(exportType, params);
     try {
-      const params: Record<string, string> = { ...exportType.params };
-      if (brandFilter) params.brand = brandFilter;
-
-      const query = new URLSearchParams(params).toString();
+      const query = certProductQuery(params);
       const baseExportUrl =
         'exportUrl' in exportType ? exportType.exportUrl : '/api/reports/export';
       const url = `${baseExportUrl}${query ? `?${query}` : ''}`;

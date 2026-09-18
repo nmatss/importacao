@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { StrictMode } from 'react';
 import { toast } from 'sonner';
 import { formatDateTime } from '@/shared/lib/utils';
 import { matchesStatusFilters } from './CertProdutosPage';
 import type { CertProduct, CertProductsResponse } from '@/shared/lib/cert-api-client';
+
+vi.mock('@/shared/hooks/useAuth', () => ({ useAuth: () => ({ user: { role: 'analyst' } }) }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -13,6 +16,7 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
   return {
     ...actual,
     fetchCertProducts: vi.fn(),
+    downloadCertApiResource: vi.fn(),
     verifyCertProduct: vi.fn(),
     fetchCertGrifes: vi.fn(),
     fetchLastCertSync: vi.fn(),
@@ -21,6 +25,9 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
 });
 
 import {
+  certProductQuery,
+  upcomingLicenseFilters,
+  downloadCertApiResource,
   fetchCertGrifes,
   fetchCertProducts,
   fetchLastCertSync,
@@ -111,9 +118,9 @@ describe('matchesStatusFilters', () => {
 
 const mockedFetch = vi.mocked(fetchCertProducts);
 
-function renderPage() {
+function renderPage(path = '/certificacoes/produtos') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <CertProdutosPage />
     </MemoryRouter>,
   );
@@ -688,5 +695,190 @@ describe('CertProdutosPage — numero do certificado, grife e sync', () => {
     mockedLastSync.mockRejectedValue(new Error('Erro na API: 503'));
     renderPage();
     expect(await screen.findByText('Produto com certificado')).toBeInTheDocument();
+  });
+});
+
+describe('licenciamento somente leitura', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedFetch.mockResolvedValue({
+      products: [
+        {
+          sku: 'SKU-LIC',
+          name: 'Descrição licenciada',
+          brand: 'Puket',
+          license_deadline: '2026-10-02',
+          linx_synced_at: '2026-09-18T12:00:00Z',
+        },
+      ],
+      total: 1,
+    });
+    mockedGrifes.mockResolvedValue({ grifes: [], sem_grife: 0 });
+    mockedLastSync.mockResolvedValue({ last_run: null });
+    vi.mocked(downloadCertApiResource).mockResolvedValue(undefined);
+  });
+
+  it('faixa sem leitura Linx explica o vazio e acesso a pendentes remove a faixa', async () => {
+    mockedFetch.mockResolvedValue({ products: [], total: 0 });
+    renderPage('/certificacoes/produtos?license_start_date=2026-09-18&license_end_date=2026-10-17');
+    expect(await screen.findByText(/ainda não foi lido do Linx/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver licenciamento pendente' }));
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          license_status: 'PENDENTE',
+          license_start_date: undefined,
+          license_end_date: undefined,
+        }),
+      ),
+    );
+    const range = screen.getByRole('group', { name: 'Vencimento do licenciamento (Linx)' });
+    expect(within(range).getByLabelText('De')).toHaveValue('');
+    expect(within(range).getByLabelText('Até')).toHaveValue('');
+  });
+
+  it('restaura faixa e status ao voltar e avançar sem atualizar router durante render', async () => {
+    function HistoryControls() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button onClick={() => navigate(-1)}>Voltar histórico</button>
+          <button onClick={() => navigate(1)}>Avançar histórico</button>
+        </>
+      );
+    }
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(
+        <StrictMode>
+          <MemoryRouter
+            initialEntries={[
+              '/certificacoes/produtos?license_start_date=2026-09-18&license_end_date=2026-10-17',
+            ]}
+          >
+            <HistoryControls />
+            <CertProdutosPage />
+          </MemoryRouter>
+        </StrictMode>,
+      );
+      await screen.findByText('Descrição licenciada');
+      fireEvent.click(screen.getByRole('button', { name: 'Ativo' }));
+      await waitFor(() =>
+        expect(mockedFetch).toHaveBeenLastCalledWith(
+          expect.objectContaining({ cert_status: 'ATIVO' }),
+        ),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Licenciamentos vencidos' }));
+      await waitFor(() =>
+        expect(mockedFetch).toHaveBeenLastCalledWith(
+          expect.objectContaining({ license_status: 'VENCIDO', license_start_date: undefined }),
+        ),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Voltar histórico' }));
+      await waitFor(() =>
+        expect(mockedFetch).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            cert_status: 'ATIVO',
+            license_status: undefined,
+            license_start_date: '2026-09-18',
+            license_end_date: '2026-10-17',
+          }),
+        ),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Avançar histórico' }));
+      await waitFor(() =>
+        expect(mockedFetch).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            cert_status: 'ATIVO',
+            license_status: 'VENCIDO',
+            license_start_date: undefined,
+            license_end_date: undefined,
+          }),
+        ),
+      );
+      expect(error.mock.calls.flat().join(' ')).not.toMatch(/Cannot update a component/);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('usa o dia de São Paulo e trinta datas inclusivas na virada de mês/ano', () => {
+    expect(upcomingLicenseFilters(new Date('2027-01-01T01:30:00Z'))).toEqual({
+      license_start_date: '2026-12-31',
+      license_end_date: '2027-01-29',
+    });
+  });
+
+  it('preserva faixa ao trocar status e exporta os mesmos filtros sem paginacao', async () => {
+    renderPage('/certificacoes/produtos?license_start_date=2026-09-18&license_end_date=2026-10-17');
+    await screen.findByText('Descrição licenciada');
+    expect(screen.getByText(/Linx lido em/)).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Data da validação' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ativo' }));
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          cert_status: 'ATIVO',
+          license_start_date: '2026-09-18',
+          license_end_date: '2026-10-17',
+          page: 1,
+        }),
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Puket' }));
+    await screen.findByText('Descrição licenciada');
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar produtos filtrados' }));
+    await waitFor(() => expect(downloadCertApiResource).toHaveBeenCalled());
+    const [url] = vi.mocked(downloadCertApiResource).mock.calls[0];
+    const query = new URL(String(url), 'https://example.invalid').searchParams;
+    const current = mockedFetch.mock.calls.at(-1)![0]!;
+    const filters = { ...current, page: undefined, per_page: undefined };
+    expect(query.toString()).toBe(certProductQuery(filters));
+    expect(query.has('page')).toBe(false);
+    expect(query.has('per_page')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }));
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          license_start_date: undefined,
+          license_end_date: undefined,
+          cert_status: undefined,
+        }),
+      ),
+    );
+  });
+
+  it('bloqueia intervalo invertido e não faz consulta ou exportacao inválida', async () => {
+    renderPage('/certificacoes/produtos?license_start_date=2026-10-18&license_end_date=2026-09-18');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Exportar produtos filtrados' })).toBeDisabled(),
+    );
+    expect(mockedFetch).not.toHaveBeenCalled();
+    expect(downloadCertApiResource).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/início do período de licenciamento/).length).toBeGreaterThan(0);
+  });
+
+  it('atalhos vencidos e próximos 30 dias não deixam filtros incompatíveis', async () => {
+    renderPage('/certificacoes/produtos?license_status=VENCIDO');
+    await screen.findByText('Descrição licenciada');
+    fireEvent.click(screen.getByRole('button', { name: 'Próximos 30 dias' }));
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          ...upcomingLicenseFilters(),
+          license_status: undefined,
+        }),
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Licenciamentos vencidos' }));
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          license_status: 'VENCIDO',
+          license_start_date: undefined,
+          license_end_date: undefined,
+        }),
+      ),
+    );
   });
 });

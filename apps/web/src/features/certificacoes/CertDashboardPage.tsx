@@ -4,6 +4,8 @@ import { useTheme } from '@/shared/contexts/ThemeContext';
 import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
 import { CertBrandChart } from '@/features/certificacoes/components/CertBrandChart';
 import {
+  certProductQuery,
+  upcomingLicenseFilters,
   fetchCertStats,
   fetchCertReports,
   fetchCertProducts,
@@ -267,6 +269,24 @@ export default function CertDashboardPage() {
           </button>
         </div>
       )}
+
+      <nav aria-label="Consultas de licenciamento" className="flex flex-wrap gap-3 text-sm">
+        <Link
+          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2"
+          to={`/certificacoes/produtos?${certProductQuery(upcomingLicenseFilters())}`}
+        >
+          Licenciamentos a vencer nos próximos 30 dias
+        </Link>
+        <Link
+          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2"
+          to="/certificacoes/produtos?license_status=VENCIDO"
+        >
+          Licenciamentos vencidos
+        </Link>
+        <p className="w-full text-xs text-slate-500 dark:text-slate-400">
+          Fonte: última leitura do Linx. Consulta de SKU, descrição e prazo, sem alterar o ERP.
+        </p>
+      </nav>
 
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

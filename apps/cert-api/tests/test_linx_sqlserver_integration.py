@@ -184,6 +184,39 @@ try:
         assert query("SELECT * FROM PROP_PRODUTOS WHERE PRODUTO=%s ORDER BY ITEM_PROPRIEDADE", (sku,)) == rows_before
         assert query("SELECT COUNT(*) FROM WRITE_AUDIT") == audit_before
 
+    stage = "strict read confirms license and preserves default API"
+    audit_before = query("SELECT COUNT(*) FROM WRITE_AUDIT")
+    expected = {"SYNTHETIC": {"00224": "03/02/2031", "00225": "31/12/2035"}}
+    assert sqlserver.fetch_produto_propriedades(
+        "puket", ["00224", "00225"], ["SYNTHETIC"], strict_prop_codes=["00225"]
+    ) == expected
+    assert sqlserver.fetch_produto_propriedades("puket", ["00224", "00225"], ["SYNTHETIC"]) == expected
+    # A duplicate CERTIFICATE must not prevent a strict LICENSING read.
+    assert sqlserver.fetch_produto_propriedades(
+        "puket", ["00224", "00225"], ["DUPLICATE"], strict_prop_codes=["00225"]
+    ) == {"DUPLICATE": {"00224": "UNCHANGED"}}
+    assert query("SELECT COUNT(*) FROM WRITE_AUDIT") == audit_before
+
+    stage = "strict read rejects duplicate license and wrong item without writes"
+    for sku, items in (("DUPLICATE", (1, 2)), ("WRONG-ITEM", (2,))):
+        for item in items:
+            execute("INSERT INTO PROP_PRODUTOS VALUES ('00225', %s, %s, '31/12/2035')", (sku, item))
+        rows_before = query("SELECT * FROM PROP_PRODUTOS ORDER BY PRODUTO, PROPRIEDADE, ITEM_PROPRIEDADE")
+        audit_before = query("SELECT COUNT(*) FROM WRITE_AUDIT")
+        try:
+            sqlserver.fetch_produto_propriedades(
+                "puket", ["00224", "00225"], [sku], strict_prop_codes=["00225"]
+            )
+        except sqlserver.LinxPropertyCardinalityError:
+            pass
+        else:
+            raise AssertionError("strict read accepted ambiguous license")
+        # Existing callers remain opt-in: default still returns the legacy shape.
+        legacy = sqlserver.fetch_produto_propriedades("puket", ["00225"], [sku])
+        assert legacy == {sku: {"00225": "31/12/2035"}}
+        assert query("SELECT * FROM PROP_PRODUTOS ORDER BY PRODUTO, PROPRIEDADE, ITEM_PROPRIEDADE") == rows_before
+        assert query("SELECT COUNT(*) FROM WRITE_AUDIT") == audit_before
+
     stage = "trigger changes committed value and requires reconciliation"
     execute("""CREATE TRIGGER CHANGE_FINAL_VALUE ON PROP_PRODUTOS AFTER INSERT, UPDATE AS
         BEGIN
@@ -203,7 +236,7 @@ try:
         raise AssertionError("trigger divergence accepted")
     # The commit happened: no false claim of rollback after read-back mismatch.
     assert query("SELECT VALOR_PROPRIEDADE FROM PROP_PRODUTOS WHERE PRODUTO='TRIGGER'") == [("TRIGGER-ALTERED",)]
-    assert query("SELECT VALOR_PROPRIEDADE FROM PROP_PRODUTOS WHERE PROPRIEDADE='00225'") == [("31/12/2035",)]
+    assert query("SELECT VALOR_PROPRIEDADE FROM PROP_PRODUTOS WHERE PROPRIEDADE='00225' AND PRODUTO='SYNTHETIC'") == [("31/12/2035",)]
     print("SQLSERVER_REAL_OK")
 except Exception as exc:
     # Never print exception text, connection objects, credentials or server logs.

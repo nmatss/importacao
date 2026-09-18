@@ -181,7 +181,7 @@ def test_cadastro_read_model_preserves_sheet_snapshot_and_resolves_links(isolate
 async def test_registration_to_product_restriction_and_unlink_http_cycle(
     isolated_postgres, test_client, api_key_headers, monkeypatch, tmp_path
 ):
-    from app.routes import certificates, certifications
+    from app.routes import certificates, certifications, reports
 
     database = isolated_postgres
     database.ensure_tables()
@@ -225,6 +225,25 @@ async def test_registration_to_product_restriction_and_unlink_http_cycle(
     assert products[0]['numero_certificado'] == 'OTHER-SOURCE'
     assert products[0]['cert_status'] == 'PENDENTE'
     assert '12345/2026' in products[0]['cert_status_reason']
+    # Combined release: license filters/export must retain the effective
+    # registration conflict instead of reverting to the raw Sheets status.
+    with database.db() as (_conn, cur):
+        cur.execute("UPDATE cert_products SET linx_fim_licenciamento='2026-09-18' WHERE sku='HTTP-NEW'")
+    monkeypatch.setattr(reports, 'DATABASE_URL', 'isolated-test')
+    monkeypatch.setattr(reports, 'safe_license_map', lambda: {})
+    monkeypatch.setattr(reports, 'snapshot_sync_warning', lambda: None)
+    export_path = tmp_path / 'combined-export.xlsx'
+    export_path.write_bytes(b'synthetic')
+    export = MagicMock(return_value=export_path)
+    monkeypatch.setattr(reports, 'generate_products_report', export)
+    params = {'cert_status': 'PENDENTE', 'license_start_date': '2026-09-18', 'license_end_date': '2026-09-18'}
+    filtered = await test_client.get('/api/products', params=params, headers=api_key_headers)
+    assert filtered.status_code == 200, filtered.text
+    assert filtered.json()['total'] == 1
+    exported = await test_client.post('/api/reports/export', params=params, headers=api_key_headers)
+    assert exported.status_code == 200, exported.text
+    assert [row['sku'] for row in export.call_args.args[0]] == ['HTTP-NEW']
+    assert export.call_args.args[0][0]['numero_certificado'] == 'OTHER-SOURCE'
     # The exported workbook uses the exact same effective row and preserves
     # its existing columns; no ERP/site calls occur in this fixture.
     import openpyxl

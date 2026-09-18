@@ -45,8 +45,7 @@ export interface CertProduct {
   // fiscal sobre poder faturar, e existe para SKUs que não têm data em G.
   encerramento_status?: string | null;
   // Prazo de licenciamento — distinto do prazo de venda (sale_deadline).
-  // Alimenta a coluna "Licen. - Prazo". Backend ainda precisa expor este campo
-  // a partir da planilha "Licenciamentos Vencidos" (ver followups).
+  // Alimenta a coluna "Licen. - Prazo" a partir do snapshot somente leitura do Linx.
   license_deadline?: string | null;
   license_deadline_date?: string | null;
   // Contrato D11 (reunião 11/09/2026). Dois eixos separados: o STATUS do
@@ -393,9 +392,7 @@ export async function fetchCertStats(): Promise<CertStats> {
   return certFetch<CertStats>('/api/stats');
 }
 
-export async function fetchCertProducts(params?: {
-  page?: number;
-  per_page?: number;
+export interface CertProductFilters {
   search?: string;
   brand?: string;
   status?: string;
@@ -406,7 +403,28 @@ export async function fetchCertProducts(params?: {
   license_status?: string;
   comercializacao_status?: string;
   grife?: string;
-}): Promise<CertProductsResponse> {
+  license_start_date?: string;
+  license_end_date?: string;
+}
+
+/** Trinta datas inclusivas, a partir do dia comercial de São Paulo. */
+export function upcomingLicenseFilters(now = new Date()): CertProductFilters {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((item) => item.type === type)!.value;
+  const start = `${part('year')}-${part('month')}-${part('day')}`;
+  const end = new Date(`${start}T12:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 29);
+  return { license_start_date: start, license_end_date: end.toISOString().slice(0, 10) };
+}
+
+export function certProductQuery(
+  params?: CertProductFilters & { page?: number; per_page?: number },
+): string {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
   if (params?.per_page) query.set('per_page', String(params.per_page));
@@ -421,7 +439,15 @@ export async function fetchCertProducts(params?: {
   if (params?.license_status) query.set('license_status', params.license_status);
   if (params?.comercializacao_status)
     query.set('comercializacao_status', params.comercializacao_status);
-  const qs = query.toString();
+  if (params?.license_start_date) query.set('license_start_date', params.license_start_date);
+  if (params?.license_end_date) query.set('license_end_date', params.license_end_date);
+  return query.toString();
+}
+
+export async function fetchCertProducts(
+  params?: CertProductFilters & { page?: number; per_page?: number },
+): Promise<CertProductsResponse> {
+  const qs = certProductQuery(params);
   return certFetch<CertProductsResponse>(`/api/products${qs ? `?${qs}` : ''}`);
 }
 
