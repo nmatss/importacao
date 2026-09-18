@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -16,10 +18,12 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
     linkCertificateItems: vi.fn(),
     removeCertificateItem: vi.fn(),
     updateCertificateItemRestriction: vi.fn(),
+    batchCertificateItems: vi.fn(),
   };
 });
 
 import {
+  batchCertificateItems,
   createCertificate,
   fetchCertProductDetail,
   fetchCertificateDetail,
@@ -29,6 +33,7 @@ import {
   removeCertificateItem,
   updateCertificateItemRestriction,
   type CertCertificate,
+  type CertItemsBatchResult,
 } from '@/shared/lib/cert-api-client';
 import CertCadastroPage, { parsePastedSkus, todayLocalIso } from './CertCadastroPage';
 
@@ -256,6 +261,8 @@ describe('parsePastedSkus', () => {
     expect(parsePastedSkus('A\nB\n\nA\nC')).toEqual(['A', 'B', 'C']);
     expect(parsePastedSkus('A, B; C')).toEqual(['A', 'B', 'C']);
     expect(parsePastedSkus('   ')).toEqual([]);
+    // TAB (duas colunas coladas do Excel) separa como no servidor — nunca um SKU com TAB dentro.
+    expect(parsePastedSkus('A\tB')).toEqual(['A', 'B']);
   });
 });
 
@@ -297,6 +304,7 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
 
     await user.type(screen.getByLabelText('SKU do produto *'), 'PI5558Y');
     await user.type(screen.getByLabelText('Validade do Certificado'), '2028-07-27');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
     await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
     await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
 
@@ -306,12 +314,11 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
           sku: 'PI5558Y',
           validade_certificado: '2028-07-27',
           fim_venda: '2026-10-29',
+          situacao: 'ENCERRADO',
         }),
       ),
     );
-    expect(
-      screen.getByText(/Deixe vazio enquanto o certificado estiver ativo/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Fica só no portal/)).toBeInTheDocument();
   });
 
   it('licenciamento é somente leitura e não é enviado ao cadastrar certificado ativo', async () => {
@@ -333,6 +340,7 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
     render(<CertCadastroPage />);
 
     await user.type(screen.getByLabelText('SKU do produto *'), 'PI5558Y');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
     await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
     await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
 
@@ -345,6 +353,7 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
     render(<CertCadastroPage />);
 
     await user.type(screen.getByLabelText('SKUs adicionais (um por linha)'), 'A\nB\nA\nC');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
     await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
     expect(screen.getByText(/3 SKU\(s\) serão vinculados/)).toBeInTheDocument();
 
@@ -524,5 +533,465 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
     await user.click(await screen.findByRole('button', { name: /Itens \(2\)/ }));
 
     expect(await screen.findByText(/a data já gravada no Linx permanece/)).toBeInTheDocument();
+  });
+});
+
+// ── C1: a tela nunca mandava `situacao`; o back assumia ATIVO e devolvia 400 para
+// todo cadastro com fim de venda. Os testes antigos não pegavam porque o front
+// mocka `createCertificate` e o back sempre mandava ENCERRADO. O contrato abaixo
+// é um arquivo lido pelos DOIS lados (ver test_certificates_routes.py).
+function loadCreateContract(): {
+  encerrado: Record<string, string>;
+  ativo: Record<string, string>;
+  lote: { linhas: string[]; motivo: string; encerrar_itens_com_data: boolean; dry_run: boolean };
+} {
+  const relative = 'apps/cert-api/tests/fixtures/certificate_create_contract.json';
+  const candidates = [
+    resolve(process.cwd(), '../cert-api/tests/fixtures/certificate_create_contract.json'),
+    resolve(process.cwd(), relative),
+  ];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (!found) throw new Error(`Nao encontrei ${relative} a partir de ${process.cwd()}`);
+  return JSON.parse(readFileSync(found, 'utf-8'));
+}
+
+/** O que a tela mandou de fato: sem chaves `undefined` e sem o PDF ausente. */
+function sentPayload(): Record<string, unknown> {
+  const input = mockedCreate.mock.calls[0][0] as unknown as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined && value !== null),
+  );
+}
+
+describe('CertCadastroPage — situação do certificado (contrato com o cert-api)', () => {
+  const contract = loadCreateContract();
+
+  beforeEach(() => {
+    mockedFetchCertificates.mockReset();
+    mockedCreate.mockReset();
+    mockedFetchCertificates.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    mockedCreate.mockResolvedValue(certificate());
+  });
+
+  it('certificado ativo: fim de venda desabilitado e payload igual ao contrato', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    expect(screen.getByLabelText('Situação do certificado *')).toHaveValue('ATIVO');
+    expect(screen.getByLabelText('Fim de venda (trava)')).toBeDisabled();
+
+    await user.type(screen.getByLabelText('SKU do produto *'), contract.ativo.sku);
+    await user.type(
+      screen.getByLabelText('Validade do Certificado'),
+      contract.ativo.validade_certificado,
+    );
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+    expect(sentPayload()).toEqual(contract.ativo);
+  });
+
+  it('certificado encerrado: habilita o fim de venda e o payload é o do contrato', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), contract.encerrado.sku);
+    await user.type(
+      screen.getByLabelText('Validade do Certificado'),
+      contract.encerrado.validade_certificado,
+    );
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
+    const fimVenda = screen.getByLabelText('Fim de venda (trava)');
+    expect(fimVenda).toBeEnabled();
+    expect(fimVenda).toHaveAttribute('aria-required', 'true');
+    await user.type(fimVenda, contract.encerrado.fim_venda);
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+    expect(sentPayload()).toEqual(contract.encerrado);
+  });
+
+  it('voltar para Ativo limpa o fim de venda e ele não é enviado', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), 'PI5555Y');
+    await user.type(screen.getByLabelText('Validade do Certificado'), '2027-03-22');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
+    await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ATIVO');
+
+    expect(screen.getByLabelText('Fim de venda (trava)')).toHaveValue('');
+    expect(screen.getByLabelText('Fim de venda (trava)')).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+    expect(sentPayload()).toEqual(contract.ativo);
+  });
+
+  it('encerrado sem fim de venda não é enviado: o erro aparece na tela', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), 'PI5558Y');
+    await user.type(screen.getByLabelText('Validade do Certificado'), '2028-07-27');
+    await user.selectOptions(screen.getByLabelText('Situação do certificado *'), 'ENCERRADO');
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    expect(
+      await screen.findByText(/Informe o fim de venda do certificado encerrado/),
+    ).toBeInTheDocument();
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+});
+
+// ── C5: "skipped" = Linx ligado, mas nada a gravar (certificado ativo). Antes o
+// back devolvia "applied" e a tela dizia "Gravado no Linx" sem gravação alguma.
+describe('CertCadastroPage — status skipped do Linx', () => {
+  beforeEach(() => {
+    mockedFetchCertificates.mockReset();
+    mockedCreate.mockReset();
+  });
+
+  it('não diz "Gravado no Linx" nem oferece reenvio para certificado sem data a gravar', async () => {
+    mockedFetchCertificates.mockResolvedValue({
+      items: [certificate({ linx_status: 'skipped' })],
+      total: 1,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    render(<CertCadastroPage />);
+
+    const row = (await screen.findByText('PI5555Y')).closest('div') as HTMLElement;
+    expect(within(row).getByText('Nada a gravar no Linx')).toBeInTheDocument();
+    expect(within(row).queryByText('Gravado no Linx')).not.toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /Reenviar ao Linx/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Nada a gravar no Linx' })).toBeInTheDocument();
+  });
+
+  it('explica no resultado do cadastro que certificado ativo não trava venda', async () => {
+    const user = userEvent.setup();
+    mockedFetchCertificates.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    mockedCreate.mockResolvedValue(certificate({ linx_status: 'skipped' }));
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), 'PI5555Y');
+    await user.type(screen.getByLabelText('Validade do Certificado'), '2027-03-22');
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    expect(await screen.findByText(/Certificado salvo/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nenhuma data foi enviada ao Linx: certificado ativo não tem fim de venda/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('createCertificate (cliente real) — multipart do contrato', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(['ativo', 'encerrado'] as const)(
+    'monta exatamente os campos do contrato (%s)',
+    async (scenario) => {
+      const contract = loadCreateContract()[scenario];
+      const actual = await vi.importActual<typeof import('@/shared/lib/cert-api-client')>(
+        '@/shared/lib/cert-api-client',
+      );
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ id: 'c1', linx_status: 'disabled' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      await actual.createCertificate({ ...contract, pdf: null } as Parameters<
+        typeof actual.createCertificate
+      >[0]);
+
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/api\/certificates$/);
+      expect(init.method).toBe('POST');
+      const sent = Object.fromEntries((init.body as FormData).entries());
+      expect(sent).toEqual(contract);
+    },
+  );
+});
+
+// ── C2: carga em lote "SKU;data" — lista de produtos e suas respectivas datas.
+// Quem interpreta e valida as linhas é o SERVIDOR; a tela manda o texto cru,
+// mostra a prévia por linha e só libera a gravação com a prévia válida.
+const mockedBatch = vi.mocked(batchCertificateItems);
+
+function batchResult(overrides: Partial<CertItemsBatchResult> = {}): CertItemsBatchResult {
+  return {
+    dry_run: true,
+    valid: true,
+    total_linhas: 2,
+    resumo: { vincular: 1, vincular_e_encerrar: 0, encerrar: 1, sem_alteracao: 0, erro: 0 },
+    linhas: [
+      {
+        linha: 1,
+        conteudo: 'PI5555Y;29/10/2026',
+        sku: 'PI5555Y',
+        fim_venda: '2026-10-29',
+        acao: 'encerrar',
+        status: 'ok',
+        mensagem: 'Encerrar o item com fim de venda em 29/10/2026',
+        aviso: null,
+      },
+      {
+        linha: 2,
+        conteudo: 'PI7001Y',
+        sku: 'PI7001Y',
+        fim_venda: null,
+        acao: 'vincular',
+        status: 'ok',
+        mensagem: 'Vincular ao certificado (herda a situacao do certificado)',
+        aviso: null,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe('CertCadastroPage — carga em lote SKU;data', () => {
+  const lote = loadCreateContract().lote;
+
+  beforeEach(() => {
+    mockedFetchCertificates.mockReset();
+    mockedDetail.mockReset();
+    mockedBatch.mockReset();
+    mockedLink.mockReset();
+    mockedFetchCertificates.mockResolvedValue({
+      items: [certificate()],
+      total: 1,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    mockedDetail.mockResolvedValue(
+      certificate({
+        items: [
+          {
+            id: 'i1',
+            certificate_id: 'c1',
+            sku: 'PI5555Y',
+            brand: 'imaginarium',
+            linx_status: 'disabled',
+          },
+        ],
+      }),
+    );
+  });
+
+  async function openBatchMode(user: ReturnType<typeof userEvent.setup>) {
+    render(<CertCadastroPage />);
+    await user.click(await screen.findByRole('button', { name: /Itens \(2\)/ }));
+    await user.click(await screen.findByRole('button', { name: 'SKU;data' }));
+  }
+
+  async function fillBatch(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText(/Produtos e datas/), lote.linhas.join('\n'));
+    await user.click(screen.getByLabelText(/Encerrar os itens com data/));
+    await user.type(screen.getByLabelText('Motivo do lote *'), lote.motivo);
+  }
+
+  it('mostra o formato com exemplo e exige motivo antes da prévia', async () => {
+    const user = userEvent.setup();
+    await openBatchMode(user);
+
+    expect(screen.getByText(/PI7001Y;30\/10\/2026/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Produtos e datas/), 'PI7001Y;30/10/2026');
+    expect(screen.getByRole('button', { name: /Pré-visualizar lote \(1\)/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+  });
+
+  it('manda as linhas cruas do contrato e mostra o que será feito por linha', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockResolvedValue(batchResult());
+    await openBatchMode(user);
+    await fillBatch(user);
+
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote \(2\)/ }));
+
+    await waitFor(() =>
+      expect(mockedBatch).toHaveBeenCalledWith('c1', {
+        linhas: lote.linhas,
+        motivo: lote.motivo,
+        encerrarItensComData: lote.encerrar_itens_com_data,
+        dryRun: true,
+      }),
+    );
+    const preview = await screen.findByRole('table', { name: /Prévia do lote/ });
+    expect(
+      within(preview).getByText('Encerrar o item com fim de venda em 29/10/2026'),
+    ).toBeVisible();
+    expect(within(preview).getByText(/Vincular ao certificado/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeEnabled();
+  });
+
+  it('com erro em uma linha mostra número, conteúdo e motivo — e não deixa gravar', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockResolvedValue(
+      batchResult({
+        valid: false,
+        resumo: { vincular: 0, vincular_e_encerrar: 0, encerrar: 1, sem_alteracao: 0, erro: 1 },
+        linhas: [
+          batchResult().linhas[0],
+          {
+            linha: 2,
+            conteudo: 'PI7001Y;31/02/2026',
+            sku: 'PI7001Y',
+            fim_venda: null,
+            acao: null,
+            status: 'erro',
+            mensagem: "Data invalida: '31/02/2026'. Use dd/mm/aaaa (ex.: 30/10/2026)",
+            aviso: null,
+          },
+        ],
+      }),
+    );
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+
+    const preview = await screen.findByRole('table', { name: /Prévia do lote/ });
+    const errorRow = within(preview).getByText('PI7001Y;31/02/2026').closest('tr') as HTMLElement;
+    expect(within(errorRow).getByText('2')).toBeInTheDocument();
+    expect(within(errorRow).getByText(/Data invalida/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nada será gravado enquanto houver linha com erro/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+  });
+
+  it('editar o texto depois da prévia exige nova prévia', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockResolvedValue(batchResult());
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeEnabled(),
+    );
+
+    await user.type(screen.getByLabelText(/Produtos e datas/), '\nOUTRO;01/11/2026');
+
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+    expect(screen.queryByRole('table', { name: /Prévia do lote/ })).not.toBeInTheDocument();
+  });
+
+  it('confirma com dry_run=false, atualiza os itens e trava o botão', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockResolvedValueOnce(batchResult());
+    mockedBatch.mockResolvedValueOnce(
+      batchResult({
+        dry_run: false,
+        linhas: batchResult().linhas.map((l) => ({ ...l, status: 'aplicado' as const })),
+        items: [
+          {
+            id: 'i1',
+            certificate_id: 'c1',
+            sku: 'PI5555Y',
+            brand: 'imaginarium',
+            linx_status: 'pending',
+            situacao: 'ENCERRADO',
+            situacao_efetiva: 'ENCERRADO',
+            fim_venda: '2026-10-29',
+            fim_venda_efetivo: '2026-10-29',
+            restricao_origem: 'item',
+          },
+          {
+            id: 'i2',
+            certificate_id: 'c1',
+            sku: 'PI7001Y',
+            brand: 'imaginarium',
+            linx_status: 'disabled',
+          },
+        ],
+      }),
+    );
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeEnabled(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar lote' }));
+
+    await waitFor(() =>
+      expect(mockedBatch).toHaveBeenLastCalledWith('c1', {
+        linhas: lote.linhas,
+        motivo: lote.motivo,
+        encerrarItensComData: true,
+        dryRun: false,
+      }),
+    );
+    expect(await screen.findByText(/Fim de venda: 29\/10\/2026/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Encerrar item PI7001Y' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled(),
+    );
+    expect(mockedBatch).toHaveBeenCalledTimes(2);
+    expect(mockedLink).not.toHaveBeenCalled();
+  });
+
+  it('mostra o erro do servidor quando a prévia falha', async () => {
+    const user = userEvent.setup();
+    mockedBatch.mockRejectedValue(new Error('Erro na API: Envie no maximo 500 linhas por vez'));
+    await openBatchMode(user);
+    await fillBatch(user);
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar lote/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no maximo 500 linhas/);
+    expect(screen.getByRole('button', { name: 'Confirmar lote' })).toBeDisabled();
+  });
+});
+
+describe('batchCertificateItems (cliente real) — corpo do contrato', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('manda exatamente o JSON que o cert-api valida', async () => {
+    const lote = loadCreateContract().lote;
+    const actual = await vi.importActual<typeof import('@/shared/lib/cert-api-client')>(
+      '@/shared/lib/cert-api-client',
+    );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ dry_run: true, valid: true, linhas: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await actual.batchCertificateItems('c1', {
+      linhas: lote.linhas,
+      motivo: lote.motivo,
+      encerrarItensComData: lote.encerrar_itens_com_data,
+      dryRun: lote.dry_run,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/certificates\/c1\/items\/batch$/);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(lote);
   });
 });

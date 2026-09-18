@@ -68,6 +68,26 @@ class CertificateItemRestrictionRequest(BaseModel):
     motivo: str = Field(min_length=1, max_length=1000)
 
 
+class CertificateItemsBatchRequest(BaseModel):
+    """Carga em lote de produtos e suas datas: uma linha `SKU` ou `SKU;data`.
+
+    As linhas chegam CRUAS (como o operador colou) e sao interpretadas e
+    validadas no servidor, com erro por linha — a tela nao decide nada. Os
+    limites (500 linhas, motivo obrigatorio ate 1000 caracteres) sao checados na
+    rota, e nao aqui, para que o erro chegue a tela como frase, e nao como a
+    lista de objetos de um 422 do Pydantic.
+
+    `dry_run` e o padrao (previa obrigatoria). `encerrar_itens_com_data` e a
+    confirmacao explicita de que as linhas com data ENCERRAM o item: item ativo
+    nao tem fim de venda, entao data sem essa confirmacao e erro de linha.
+    """
+
+    linhas: list[str] = []
+    motivo: str = ""
+    encerrar_itens_com_data: bool = False
+    dry_run: bool = True
+
+
 class ScheduleCreate(BaseModel):
     """Request body for creating a schedule."""
 

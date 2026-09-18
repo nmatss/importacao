@@ -17,6 +17,7 @@ import {
 import { SubmitButton } from '@/shared/components/SubmitButton';
 import { cn, formatDateOnly } from '@/shared/lib/utils';
 import {
+  batchCertificateItems,
   createCertificate,
   downloadCertificatePdf,
   fetchCertProductDetail,
@@ -29,7 +30,10 @@ import {
   retryCertificateLinx,
   type CertCertificate,
   type CertCertificateItem,
+  type CertItemsBatchLine,
+  type CertItemsBatchResult,
   type CertLinkResult,
+  type CertSituacao,
   type CertLinxLookup,
   type CertProduct,
   type LinxStatus,
@@ -47,6 +51,12 @@ const LINX_BADGE: Record<LinxStatus, { label: string; cls: string }> = {
   applied: {
     label: 'Gravado no Linx',
     cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  },
+  // Linx ligado, produto encontrado, nada a gravar (certificado ativo). Neutro:
+  // não é sucesso de gravação, nem pendência que peça ação.
+  skipped: {
+    label: 'Nada a gravar no Linx',
+    cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
   },
   pending: {
     label: 'Pendente',
@@ -92,6 +102,7 @@ const PER_PAGE = 10;
 const LINX_STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Todos os status' },
   { value: 'applied', label: 'Gravado no Linx' },
+  { value: 'skipped', label: 'Nada a gravar no Linx' },
   { value: 'pending', label: 'Pendente' },
   { value: 'error', label: 'Erro no Linx' },
   { value: 'disabled', label: 'Não gravado (Linx off)' },
@@ -108,14 +119,15 @@ export function todayLocalIso(now: Date = new Date()): string {
 }
 
 /**
- * Lê a lista de SKUs colada da planilha (uma por linha, vírgula ou ';').
+ * Lê a lista de SKUs colada da planilha (uma por linha, vírgula, ';' ou TAB).
  * Espelha `_parse_skus` do cert-api: preserva a ordem e remove repetidos, para
- * que a prévia mostre exatamente o que será enviado.
+ * que a prévia mostre exatamente o que será enviado. Esta lista é SÓ de SKUs:
+ * data colada junto é recusada pelo servidor (use o modo "SKU;data").
  */
 export function parsePastedSkus(raw: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const part of raw.replace(/[;,]/g, '\n').split(/\r?\n/)) {
+  for (const part of raw.split(/[;,\t\r\n]/)) {
     const clean = part.trim();
     if (!clean || seen.has(clean)) continue;
     seen.add(clean);
@@ -126,6 +138,29 @@ export function parsePastedSkus(raw: string): string[] {
 
 const MAX_ITEMS_PER_REQUEST = 500;
 
+const BATCH_EXAMPLE = 'PI5555Y;29/10/2026\nPI7001Y;30/10/2026\nPI8000Y';
+
+const BATCH_LINE_STYLE: Record<CertItemsBatchLine['status'], string> = {
+  ok: 'text-slate-700 dark:text-slate-200',
+  ignorada: 'text-slate-500 dark:text-slate-400',
+  aplicado: 'text-emerald-700 dark:text-emerald-300',
+  erro: 'text-danger-700 dark:text-danger-300',
+  falhou: 'text-danger-700 dark:text-danger-300',
+};
+
+const BATCH_STATUS_LABEL: Record<CertItemsBatchLine['status'], string> = {
+  ok: 'Pronta',
+  ignorada: 'Ignorada',
+  aplicado: 'Gravada',
+  erro: 'Erro',
+  falhou: 'Falhou',
+};
+
+/** Linhas da caixa de texto como serão enviadas: cruas, na ordem, com as vazias. */
+function batchLines(raw: string): string[] {
+  return raw.split(/\r?\n/);
+}
+
 const inputCls =
   'w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none';
 const labelCls = 'block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1';
@@ -135,6 +170,10 @@ export default function CertCadastroPage() {
   const [sku, setSku] = useState('');
   const [skusText, setSkusText] = useState('');
   const [validade, setValidade] = useState('');
+  // Certificado ATIVO não tem fim de venda: o campo só existe quando a situação
+  // é ENCERRADO. A tela precisa mandar `situacao` — sem ela o cert-api assume
+  // ATIVO e recusa qualquer cadastro com fim de venda (400).
+  const [situacao, setSituacao] = useState<CertSituacao>('ATIVO');
   const [fimVenda, setFimVenda] = useState('');
   const [vencimento, setVencimento] = useState('');
   const [numero, setNumero] = useState('');
@@ -179,7 +218,21 @@ export default function CertCadastroPage() {
     reason: string;
   } | null>(null);
 
+  // Carga em lote "SKU;data": o servidor interpreta e valida; a tela guarda o
+  // texto cru, o motivo único do lote e a confirmação de encerramento.
+  const [itemsMode, setItemsMode] = useState<'skus' | 'batch'>('skus');
+  const [batchText, setBatchText] = useState('');
+  const [batchReason, setBatchReason] = useState('');
+  const [batchClose, setBatchClose] = useState(false);
+  const [batchPreview, setBatchPreview] = useState<CertItemsBatchResult | null>(null);
+
   const pastedSkus = parsePastedSkus(itemsSkus);
+  const batchCount = batchLines(batchText).filter((line) => line.trim() !== '').length;
+  const batchChanges = batchPreview
+    ? batchPreview.resumo.vincular +
+      batchPreview.resumo.vincular_e_encerrar +
+      batchPreview.resumo.encerrar
+    : 0;
   const formSkus = parsePastedSkus(skusText);
 
   // Os inputs type="date" produzem ISO (AAAA-MM-DD); o cert-api aceita esse formato
@@ -243,6 +296,7 @@ export default function CertCadastroPage() {
     setSku('');
     setSkusText('');
     setValidade('');
+    setSituacao('ATIVO');
     setFimVenda('');
     setVencimento('');
     setNumero('');
@@ -298,8 +352,17 @@ export default function CertCadastroPage() {
       setError(`Vincule no máximo ${MAX_ITEMS_PER_REQUEST} SKUs por vez.`);
       return;
     }
+    const encerrado = situacao === 'ENCERRADO';
+    if (encerrado && !fimVenda) {
+      setError('Informe o fim de venda do certificado encerrado.');
+      return;
+    }
     if (!validade && !fimVenda) {
-      setError('Informe a validade do certificado ou o fim de venda por certificação.');
+      setError(
+        encerrado
+          ? 'Informe a validade do certificado ou o fim de venda por certificação.'
+          : 'Informe a validade do certificado.',
+      );
       return;
     }
 
@@ -310,7 +373,9 @@ export default function CertCadastroPage() {
         skus: formSkus.length > 0 ? formSkus.join('\n') : undefined,
         brand,
         validade_certificado: validade || undefined,
-        fim_venda: fimVenda || undefined,
+        // Defesa em profundidade: o estado já é limpo ao voltar para Ativo.
+        fim_venda: encerrado ? fimVenda || undefined : undefined,
+        situacao,
         numero_certificado: numero || undefined,
         ocp: ocp || undefined,
         orgao_certificador: orgao || undefined,
@@ -334,6 +399,8 @@ export default function CertCadastroPage() {
       if (result?.id === id) setResult(updated);
       if (updated.linx_status === 'applied') {
         toast.success('Gravado no Linx com sucesso');
+      } else if (updated.linx_status === 'skipped') {
+        toast.info('Nada a gravar no Linx: não há fim de venda para este certificado.');
       } else if (updated.linx_status === 'error') {
         toast.error(`Linx retornou erro: ${updated.linx_error || 'verifique o detalhe do item'}`);
       }
@@ -351,6 +418,10 @@ export default function CertCadastroPage() {
     setOpenCert(cert);
     setItemsSkus('');
     setPreview(null);
+    setBatchText('');
+    setBatchReason('');
+    setBatchClose(false);
+    setBatchPreview(null);
     setRestrictionForm(null);
     setItemsError(null);
     setItemsBusy(true);
@@ -386,6 +457,47 @@ export default function CertCadastroPage() {
       }
     } catch (err) {
       setItemsError(err instanceof Error ? err.message : 'Falha ao vincular os SKUs.');
+    } finally {
+      setItemsBusy(false);
+    }
+  }
+
+  /**
+   * Prévia (`dryRun`) sempre antes: o servidor devolve, por linha, o que será
+   * feito ou por que a linha é inválida. Só uma prévia VÁLIDA do conteúdo atual
+   * libera a gravação — qualquer edição depois dela a descarta.
+   */
+  async function handleBatch(dryRun: boolean) {
+    if (!openCert) return;
+    setItemsBusy(true);
+    setItemsError(null);
+    try {
+      const result = await batchCertificateItems(openCert.id, {
+        linhas: batchLines(batchText),
+        motivo: batchReason.trim(),
+        encerrarItensComData: batchClose,
+        dryRun,
+      });
+      setBatchPreview(result);
+      if (!dryRun) {
+        setOpenItems(result.items ?? openItems);
+        setBatchText('');
+        const failed = result.linhas.filter((line) => line.status === 'falhou').length;
+        const applied = result.linhas.filter(
+          (line) => line.status === 'aplicado' && line.acao !== 'sem_alteracao',
+        ).length;
+        if (failed > 0) {
+          toast.warning(
+            `${applied} linha(s) gravada(s) e ${failed} com falha. Confira o resultado.`,
+          );
+        } else {
+          toast.success(`${applied} linha(s) gravada(s) no certificado.`);
+        }
+        void loadRecent();
+      }
+    } catch (err) {
+      setBatchPreview(null);
+      setItemsError(err instanceof Error ? err.message : 'Falha ao processar o lote.');
     } finally {
       setItemsBusy(false);
     }
@@ -463,14 +575,18 @@ export default function CertCadastroPage() {
             'rounded-xl border p-4 text-sm',
             result.linx_status === 'applied'
               ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/20'
-              : result.linx_status === 'error'
-                ? 'border-danger-200 bg-danger-50 dark:border-danger-900/50 dark:bg-danger-900/20'
-                : 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20',
+              : result.linx_status === 'skipped'
+                ? 'border-sky-200 bg-sky-50 dark:border-sky-900/50 dark:bg-sky-900/20'
+                : result.linx_status === 'error'
+                  ? 'border-danger-200 bg-danger-50 dark:border-danger-900/50 dark:bg-danger-900/20'
+                  : 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20',
           )}
         >
           <div className="flex items-start gap-2">
             {result.linx_status === 'applied' ? (
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+            ) : result.linx_status === 'skipped' ? (
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300" />
             ) : (
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
             )}
@@ -481,6 +597,12 @@ export default function CertCadastroPage() {
               {result.produto_codigo && (
                 <p className="text-slate-600 dark:text-slate-300">
                   Produto no Linx: <code className="font-mono">{result.produto_codigo}</code>
+                </p>
+              )}
+              {result.linx_status === 'skipped' && (
+                <p className="text-slate-600 dark:text-slate-300">
+                  Nenhuma data foi enviada ao Linx: certificado ativo não tem fim de venda, então o
+                  produto segue liberado para venda.
                 </p>
               )}
               {result.linx_error && (
@@ -639,22 +761,6 @@ export default function CertCadastroPage() {
             </p>
           </div>
           <div>
-            <label htmlFor="cert-fim-venda" className={labelCls}>
-              Fim de venda (trava)
-            </label>
-            <input
-              id="cert-fim-venda"
-              type="date"
-              className={inputCls}
-              value={fimVenda}
-              onChange={(e) => setFimVenda(e.target.value)}
-            />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Deixe vazio enquanto o certificado estiver ativo. É esta data que trava o faturamento
-              no Linx.
-            </p>
-          </div>
-          <div>
             <label htmlFor="cert-vencimento" className={labelCls}>
               Vencimento do Licenciamento
             </label>
@@ -666,11 +772,60 @@ export default function CertCadastroPage() {
               readOnly
               aria-describedby="cert-licenciamento-origem"
             />
+            <p
+              id="cert-licenciamento-origem"
+              className="mt-1 text-xs text-slate-500 dark:text-slate-400"
+            >
+              Somente leitura: consulte o Linx para atualizar. Este cadastro não altera o
+              licenciamento.
+            </p>
           </div>
-          <p id="cert-licenciamento-origem" className="text-xs text-slate-500">
-            Somente leitura: consulte o Linx para atualizar. Este cadastro não altera o
-            licenciamento.
-          </p>
+          <div>
+            <label htmlFor="cert-situacao" className={labelCls}>
+              Situação do certificado *
+            </label>
+            <select
+              id="cert-situacao"
+              className={inputCls}
+              value={situacao}
+              onChange={(e) => {
+                const next = e.target.value as CertSituacao;
+                setSituacao(next);
+                // Voltar para Ativo descarta a trava: um certificado ativo com
+                // fim de venda é exatamente o que o cert-api recusa.
+                if (next === 'ATIVO') setFimVenda('');
+              }}
+            >
+              <option value="ATIVO">Ativo</option>
+              <option value="ENCERRADO">Encerrado</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Ativo: o produto pode ser vendido, sem data de trava. Encerrado: exige o fim de venda.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="cert-fim-venda" className={labelCls}>
+              Fim de venda (trava)
+            </label>
+            <input
+              id="cert-fim-venda"
+              type="date"
+              className={cn(inputCls, 'disabled:cursor-not-allowed disabled:opacity-50')}
+              value={fimVenda}
+              onChange={(e) => setFimVenda(e.target.value)}
+              disabled={situacao !== 'ENCERRADO'}
+              aria-required={situacao === 'ENCERRADO'}
+              aria-describedby="cert-fim-venda-ajuda"
+            />
+            <p
+              id="cert-fim-venda-ajuda"
+              className="mt-1 text-xs text-slate-500 dark:text-slate-400"
+            >
+              {situacao === 'ENCERRADO'
+                ? 'Obrigatório para certificado encerrado. É esta data que trava o faturamento no Linx.'
+                : 'Certificado ativo não tem fim de venda. Mude a situação para Encerrado para informar a trava.'}
+            </p>
+          </div>
           <div>
             <label htmlFor="cert-numero" className={labelCls}>
               Nº do Certificado
@@ -1002,88 +1157,324 @@ export default function CertCadastroPage() {
           )}
 
           <div className="space-y-3 px-5 py-4">
-            <div>
-              <label htmlFor="cert-items-skus" className={labelCls}>
-                Vincular SKUs (um por linha)
-              </label>
-              <textarea
-                id="cert-items-skus"
-                rows={3}
-                className={cn(inputCls, 'font-mono text-xs')}
-                value={itemsSkus}
-                onChange={(e) => {
-                  setItemsSkus(e.target.value);
-                  setPreview(null);
-                }}
-                placeholder={'PI5555Y\nPI7001Y'}
-              />
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label="Forma de informar os produtos"
+              className="inline-flex rounded-lg border border-slate-200 p-0.5 text-xs font-semibold dark:border-slate-700"
+            >
+              {(
+                [
+                  { value: 'skus', label: 'Lista de SKUs' },
+                  { value: 'batch', label: 'SKU;data' },
+                ] as const
+              ).map((mode) => (
                 <button
+                  key={mode.value}
                   type="button"
-                  onClick={() => handleLinkItems(true)}
-                  disabled={itemsBusy || pastedSkus.length === 0}
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  aria-pressed={itemsMode === mode.value}
+                  disabled={itemsBusy}
+                  onClick={() => {
+                    setItemsMode(mode.value);
+                    setItemsError(null);
+                  }}
+                  className={cn(
+                    'min-h-8 rounded-md px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50',
+                    itemsMode === mode.value
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800',
+                  )}
                 >
-                  {itemsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                  Pré-visualizar ({pastedSkus.length})
+                  {mode.label}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleLinkItems(false)}
-                  // `pastedSkus` entra na condição para que o clique não possa
-                  // ser repetido depois de confirmar: o textarea é limpo, mas a
-                  // prévia continua na tela (é o recibo do que foi feito).
-                  disabled={
-                    itemsBusy ||
-                    pastedSkus.length === 0 ||
-                    !preview ||
-                    !preview.dry_run ||
-                    preview.added.length === 0
-                  }
-                  title={
-                    preview
-                      ? 'Grava o vínculo e envia as datas ao Linx'
-                      : 'Pré-visualize antes de confirmar'
-                  }
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Vincular
-                </button>
-              </div>
+              ))}
             </div>
 
-            {preview && (
-              <div
-                aria-live="polite"
-                className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-              >
-                <p>
-                  <strong>{preview.added.length}</strong>{' '}
-                  {preview.dry_run ? 'serão vinculados' : 'vinculados'}
-                  {preview.already_linked.length > 0 &&
-                    ` · ${preview.already_linked.length} já estavam neste certificado`}
-                </p>
-                {preview.linked_to_other_active_cert.length > 0 && (
-                  <p className="text-amber-700 dark:text-amber-300">
-                    {preview.linked_to_other_active_cert.length} em outro certificado ativo (não
-                    serão alterados):{' '}
-                    {preview.linked_to_other_active_cert
-                      .map(
-                        (i) =>
-                          `${i.sku}${i.numero_certificado ? ` → ${i.numero_certificado}` : ''}`,
-                      )
-                      .join(', ')}
+            {itemsMode === 'skus' && (
+              <>
+                <div>
+                  <label htmlFor="cert-items-skus" className={labelCls}>
+                    Vincular SKUs (um por linha)
+                  </label>
+                  <textarea
+                    id="cert-items-skus"
+                    rows={3}
+                    className={cn(inputCls, 'font-mono text-xs')}
+                    value={itemsSkus}
+                    onChange={(e) => {
+                      setItemsSkus(e.target.value);
+                      setPreview(null);
+                    }}
+                    placeholder={'PI5555Y\nPI7001Y'}
+                  />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleLinkItems(true)}
+                      disabled={itemsBusy || pastedSkus.length === 0}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      {itemsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      Pré-visualizar ({pastedSkus.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLinkItems(false)}
+                      // `pastedSkus` entra na condição para que o clique não possa
+                      // ser repetido depois de confirmar: o textarea é limpo, mas a
+                      // prévia continua na tela (é o recibo do que foi feito).
+                      disabled={
+                        itemsBusy ||
+                        pastedSkus.length === 0 ||
+                        !preview ||
+                        !preview.dry_run ||
+                        preview.added.length === 0
+                      }
+                      title={
+                        preview
+                          ? 'Grava o vínculo e envia as datas ao Linx'
+                          : 'Pré-visualize antes de confirmar'
+                      }
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Vincular
+                    </button>
+                  </div>
+                </div>
+
+                {preview && (
+                  <div
+                    aria-live="polite"
+                    className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <p>
+                      <strong>{preview.added.length}</strong>{' '}
+                      {preview.dry_run ? 'serão vinculados' : 'vinculados'}
+                      {preview.already_linked.length > 0 &&
+                        ` · ${preview.already_linked.length} já estavam neste certificado`}
+                    </p>
+                    {preview.linked_to_other_active_cert.length > 0 && (
+                      <p className="text-amber-700 dark:text-amber-300">
+                        {preview.linked_to_other_active_cert.length} em outro certificado ativo (não
+                        serão alterados):{' '}
+                        {preview.linked_to_other_active_cert
+                          .map(
+                            (i) =>
+                              `${i.sku}${i.numero_certificado ? ` → ${i.numero_certificado}` : ''}`,
+                          )
+                          .join(', ')}
+                      </p>
+                    )}
+                    {preview.not_found_in_linx.length > 0 && (
+                      <p className="text-danger-700 dark:text-danger-300">
+                        Não encontrados no Linx: {preview.not_found_in_linx.join(', ')}
+                      </p>
+                    )}
+                    {preview.invalid.length > 0 && (
+                      <p className="text-danger-700 dark:text-danger-300">
+                        {preview.invalid.length} SKU(s) inválido(s) foram ignorados.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {itemsMode === 'batch' && (
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="cert-items-batch" className={labelCls}>
+                    Produtos e datas (um por linha: SKU ou SKU;data)
+                  </label>
+                  <textarea
+                    id="cert-items-batch"
+                    rows={5}
+                    className={cn(inputCls, 'font-mono text-xs')}
+                    value={batchText}
+                    onChange={(e) => {
+                      setBatchText(e.target.value);
+                      setBatchPreview(null);
+                    }}
+                    placeholder={BATCH_EXAMPLE}
+                    aria-describedby="cert-items-batch-ajuda"
+                  />
+                  <div
+                    id="cert-items-batch-ajuda"
+                    className="mt-1 space-y-1 text-xs text-slate-500 dark:text-slate-400"
+                  >
+                    <p>
+                      A data é o <strong>fim de venda por certificação</strong> daquele produto
+                      (dd/mm/aaaa). Também aceita TAB ou vírgula como separador — dá para colar duas
+                      colunas da planilha. Linha só com o SKU apenas vincula o produto. Até{' '}
+                      {MAX_ITEMS_PER_REQUEST} linhas por vez.
+                    </p>
+                    <pre className="rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {BATCH_EXAMPLE}
+                    </pre>
+                  </div>
+                </div>
+
+                <label className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    checked={batchClose}
+                    onChange={(e) => {
+                      setBatchClose(e.target.checked);
+                      setBatchPreview(null);
+                    }}
+                  />
+                  <span>
+                    Encerrar os itens com data. Item ativo não tem fim de venda: cada linha com data
+                    encerra aquele produto neste certificado.
+                  </span>
+                </label>
+
+                <div>
+                  <label htmlFor="cert-items-batch-reason" className={labelCls}>
+                    Motivo do lote *
+                  </label>
+                  <textarea
+                    id="cert-items-batch-reason"
+                    rows={2}
+                    maxLength={1000}
+                    className={inputCls}
+                    value={batchReason}
+                    onChange={(e) => {
+                      setBatchReason(e.target.value);
+                      setBatchPreview(null);
+                    }}
+                    placeholder="Ex.: encerramento aprovado pelo fiscal em 17/09"
+                  />
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Fica registrado na auditoria de cada item alterado.
+                  </p>
+                </div>
+
+                {batchCount > MAX_ITEMS_PER_REQUEST && (
+                  <p className="text-xs font-medium text-danger-700 dark:text-danger-300">
+                    O lote tem {batchCount} linhas; envie no máximo {MAX_ITEMS_PER_REQUEST} por vez.
                   </p>
                 )}
-                {preview.not_found_in_linx.length > 0 && (
-                  <p className="text-danger-700 dark:text-danger-300">
-                    Não encontrados no Linx: {preview.not_found_in_linx.join(', ')}
-                  </p>
-                )}
-                {preview.invalid.length > 0 && (
-                  <p className="text-danger-700 dark:text-danger-300">
-                    {preview.invalid.length} SKU(s) inválido(s) foram ignorados.
-                  </p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleBatch(true)}
+                    disabled={
+                      itemsBusy ||
+                      batchCount === 0 ||
+                      batchCount > MAX_ITEMS_PER_REQUEST ||
+                      !batchReason.trim()
+                    }
+                    title={batchReason.trim() ? undefined : 'Informe o motivo do lote'}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    {itemsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Pré-visualizar lote ({batchCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBatch(false)}
+                    // Só uma prévia VÁLIDA do conteúdo atual libera a gravação.
+                    // Depois de gravar, a prévia vira recibo (`dry_run=false`) e
+                    // o botão trava de novo.
+                    disabled={
+                      itemsBusy ||
+                      batchCount === 0 ||
+                      !batchPreview ||
+                      !batchPreview.dry_run ||
+                      !batchPreview.valid ||
+                      batchChanges === 0
+                    }
+                    title={
+                      batchPreview?.dry_run && batchPreview.valid
+                        ? 'Grava o lote no portal'
+                        : 'Pré-visualize um lote sem erros antes de confirmar'
+                    }
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Confirmar lote
+                  </button>
+                </div>
+
+                {batchPreview && (
+                  <div
+                    aria-live="polite"
+                    className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <p>
+                      <strong>
+                        {batchPreview.dry_run ? 'Prévia do lote' : 'Resultado do lote'}:
+                      </strong>{' '}
+                      {batchPreview.resumo.encerrar} a encerrar ·{' '}
+                      {batchPreview.resumo.vincular + batchPreview.resumo.vincular_e_encerrar} a
+                      vincular · {batchPreview.resumo.sem_alteracao} sem alteração ·{' '}
+                      {batchPreview.resumo.erro} com erro
+                    </p>
+                    {!batchPreview.valid && (
+                      <p className="flex items-start gap-1.5 font-medium text-danger-700 dark:text-danger-300">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        Nada será gravado enquanto houver linha com erro. Corrija as linhas marcadas
+                        e pré-visualize de novo.
+                      </p>
+                    )}
+                    {batchPreview.valid && batchPreview.dry_run && batchChanges === 0 && (
+                      <p className="text-slate-500 dark:text-slate-400">
+                        Nenhuma linha muda o certificado: não há o que gravar.
+                      </p>
+                    )}
+                    <div className="max-h-72 overflow-auto">
+                      <table
+                        aria-label={batchPreview.dry_run ? 'Prévia do lote' : 'Resultado do lote'}
+                        className="w-full border-collapse text-left"
+                      >
+                        <thead className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          <tr>
+                            <th scope="col" className="py-1 pr-2 font-medium">
+                              Linha
+                            </th>
+                            <th scope="col" className="py-1 pr-2 font-medium">
+                              Conteúdo
+                            </th>
+                            <th scope="col" className="py-1 pr-2 font-medium">
+                              Situação
+                            </th>
+                            <th scope="col" className="py-1 font-medium">
+                              O que acontece
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                          {batchPreview.linhas.map((line) => (
+                            <tr
+                              key={line.linha}
+                              className={cn('align-top', BATCH_LINE_STYLE[line.status])}
+                            >
+                              <td className="py-1 pr-2 tabular-nums">{line.linha}</td>
+                              <td className="py-1 pr-2 font-mono break-all">{line.conteudo}</td>
+                              <td className="py-1 pr-2 font-medium whitespace-nowrap">
+                                {BATCH_STATUS_LABEL[line.status] ?? line.status}
+                              </td>
+                              <td className="py-1">
+                                {line.mensagem}
+                                {line.aviso && (
+                                  <span className="block text-amber-700 dark:text-amber-300">
+                                    {line.aviso}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {batchPreview.dry_run && batchPreview.valid && batchChanges > 0 && (
+                      <p className="text-slate-500 dark:text-slate-400">
+                        Os itens encerrados ficam com o envio ao Linx pendente (use “Reenviar ao
+                        Linx”). Produtos novos só são vinculados se existirem no Linx.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}

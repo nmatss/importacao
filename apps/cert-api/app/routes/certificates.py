@@ -7,6 +7,7 @@ historico (`removed_at`/`removed_by`).
 """
 
 import json
+import re
 import uuid
 from datetime import UTC, date, datetime
 
@@ -18,8 +19,12 @@ from slowapi.util import get_remote_address
 
 from app.config import CERTS_DIR, DATABASE_URL
 from app.db.postgres import db
-from app.models.schemas import CertificateItemRestrictionRequest, CertificateItemsRequest
-from app.services.derivation import parse_data_real
+from app.models.schemas import (
+    CertificateItemRestrictionRequest,
+    CertificateItemsBatchRequest,
+    CertificateItemsRequest,
+)
+from app.services.derivation import BUSINESS_TIMEZONE, parse_data_real
 from app.services.erp_service import normalize_brand_filter
 from app.services.linx_service import (
     is_brand_supported,
@@ -44,6 +49,13 @@ _CERTIFICATE_LINK_LOCK_KEY = 776_120_912
 
 _SITUACOES = ("ATIVO", "ENCERRADO")
 
+# Resumo de um lote: vence o status de MENOR numero, para que um problema nunca
+# seja escondido por um sucesso. "skipped" (Linx ligado, nada a gravar — item de
+# certificado ATIVO) nao e problema: fica depois de "applied", entao um lote
+# misto aparece como gravado e so um lote inteiro sem gravacao aparece como
+# "skipped". Status fora do mapa cai em 0 (pior caso) nos `.get(..., 0)`.
+_LINX_STATUS_PRIORITY = {"error": 0, "pending": 1, "disabled": 2, "applied": 3, "skipped": 4}
+
 
 def _bounded(value: str, label: str, max_length: int) -> str:
     """Trim and length-check a multipart text field."""
@@ -64,14 +76,55 @@ def _actor(request: Request, fallback: str = "") -> str | None:
     return gateway[:320] or fallback or None
 
 
+# Token com cara de data ("30/10/2026", "2026-10-30", "30.10.26"). Nenhum SKU
+# real tem esse formato; quando aparece no lugar do SKU e porque o operador colou
+# a coluna de datas junto.
+_DATE_LIKE = re.compile(r"^\d{1,4}[/.\-]\d{1,2}[/.\-]\d{1,4}$")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _looks_like_date(token: str) -> bool:
+    return bool(_DATE_LIKE.match(token)) or parse_data_real(token) is not None
+
+
+def _sku_problem(sku: str) -> str | None:
+    """Por que este texto NAO pode ser gravado como SKU (None = pode)."""
+    if not sku:
+        return "SKU vazio"
+    if len(sku) > 100:
+        return "SKU excede 100 caracteres"
+    if _CONTROL_CHARS.search(sku):
+        return "SKU contem TAB ou outro caractere de controle"
+    if _looks_like_date(sku):
+        return f"'{sku}' parece uma data no lugar do SKU"
+    return None
+
+
+def _reject_dates_in_sku_list(skus: list[str]) -> None:
+    """Lista SIMPLES de SKUs nao aceita data: falha alto em vez de gravar lixo.
+
+    Colar "PI7001Y;30/10/2026" na lista simples virava os SKUs 'PI7001Y' e
+    '30/10/2026' (e, com TAB, um SKU so, com o TAB dentro). Ignorar a data em
+    silencio tambem seria errado — o operador sairia achando que ela foi gravada.
+    """
+    datas = [s for s in skus if _looks_like_date(s)]
+    if datas:
+        raise HTTPException(
+            400,
+            f"A lista de SKUs contem data no lugar de SKU ({_sample(datas, 3)}). Esta lista aceita somente "
+            "SKUs; para informar a data de cada produto use a carga 'SKU;data' no painel de produtos do "
+            "certificado.",
+        )
+
+
 def _parse_skus(raw: str) -> list[str]:
-    """Le uma lista de SKUs colada da planilha (uma por linha, virgula ou ';').
+    """Le uma lista de SKUs colada da planilha (uma por linha, virgula, ';' ou TAB).
 
     Preserva a ORDEM e remove repetidos, para que a previa mostre exatamente o
-    que o operador colou. Nao valida formato: quem decide se o SKU existe e o
-    Linx.
+    que o operador colou. Se o SKU existe quem decide e o Linx; o que NAO pode
+    ser SKU (data, caractere de controle) e barrado por `_sku_problem`.
     """
-    parts = [p.strip() for p in raw.replace(";", "\n").replace(",", "\n").splitlines()]
+    parts = [p.strip() for p in re.split(r"[;,\t\r\n]", raw)]
     seen: set[str] = set()
     out: list[str] = []
     for part in parts:
@@ -138,7 +191,9 @@ def _item_linx_result(brand: str, item: dict, certificate: dict) -> dict:
     if restriction["restricao_pendente"]:
         return {"status": "pending", "produto_codigo": item.get("produto_codigo"),
                 "error": "Restricao individual inconsistente ou sem fim de venda valido; confirmar antes do envio ao Linx", "details": []}
-    return _write_item_to_linx(brand, item["sku"], restriction["fim_venda_efetivo"], None)
+    return _write_item_to_linx(
+        brand, item["sku"], restriction["fim_venda_efetivo"], None, situacao=restriction["situacao_efetiva"]
+    )
 
 
 def _serialize_item(row: dict, certificate: dict | None = None) -> dict:
@@ -164,7 +219,9 @@ def _fetch_active_items(cur, cert_id: str, certificate: dict) -> list[dict]:
     return [_serialize_item(dict(r), certificate) for r in cur.fetchall()]
 
 
-def _write_item_to_linx(brand: str, sku: str, fim_venda: str | None, vencimento: str | None) -> dict:
+def _write_item_to_linx(
+    brand: str, sku: str, fim_venda: str | None, vencimento: str | None, situacao: str | None = None
+) -> dict:
     """Grava no Linx as datas de UM item do certificado.
 
     Decisao D11: a propriedade de certificacao (00106 Imaginarium / 00224 Puket)
@@ -175,21 +232,29 @@ def _write_item_to_linx(brand: str, sku: str, fim_venda: str | None, vencimento:
     `fim_venda`, nunca `validade_certificado`; certificado ativo sem fim de venda
     nao grava nada nessa propriedade (`write_certificate_to_linx` trata None como
     "skipped (sem valor)").
+
+    `situacao` (efetiva do item) vai junto para que a guarda "certificado ATIVO
+    nao grava" do linx_service dispare de verdade: sem ela a guarda dependia so
+    de o chamador ja ter zerado a data.
     """
     return write_certificate_to_linx(
-        brand, sku, None, None, fim_venda=fim_venda or None
+        brand, sku, None, None, fim_venda=fim_venda or None, situacao=situacao
     )
 
 
-def _save_pdf(file: UploadFile, cert_id: str) -> str:
-    """Persist an uploaded certificate PDF to CERTS_DIR.
+def _read_pdf(file: UploadFile) -> bytes:
+    """Validate an uploaded certificate PDF and return its bytes (nothing is stored).
+
+    A validacao roda ANTES do INSERT (um anexo invalido nao pode custar uma linha
+    no banco) e a gravacao em disco so DEPOIS dele (`_store_pdf`): com o arquivo
+    salvo primeiro, qualquer falha do INSERT — numero de certificado repetido,
+    banco fora — deixava um PDF orfao em CERTS_DIR.
 
     Args:
         file: The uploaded file.
-        cert_id: Certificate UUID, used to name the stored file.
 
     Returns:
-        The stored filename (basename only).
+        The validated PDF content.
 
     Raises:
         HTTPException: 400 if the file is not a PDF or exceeds the size limit.
@@ -208,9 +273,60 @@ def _save_pdf(file: UploadFile, cert_id: str) -> str:
     # Content-Type / renamed binary from being stored as a certificate.
     if not data.startswith(b"%PDF-"):
         raise HTTPException(400, "Arquivo nao e um PDF valido")
-    stored = f"{cert_id}.pdf"
+    return data
+
+
+def _store_pdf(data: bytes, stored: str) -> None:
+    """Persist already-validated PDF bytes to CERTS_DIR under `stored`."""
     (CERTS_DIR / stored).write_bytes(data)
-    return stored
+
+
+def _sample(values: list[str], limit: int = 10) -> str:
+    """Primeiros `limit` valores para uma mensagem de erro que cabe na tela."""
+    shown = ", ".join(values[:limit])
+    return f"{shown} e mais {len(values) - limit}" if len(values) > limit else shown
+
+
+def _nothing_linked_detail(link_result: dict) -> str:
+    """Explica por que NENHUM SKU do pedido pode ser vinculado."""
+    parts = ["Certificado nao cadastrado: nenhum SKU pode ser vinculado."]
+    outros = link_result.get("linked_to_other_active_cert") or []
+    if outros:
+        parts.append(
+            "Em outro certificado ativo: "
+            + _sample([f"{i['sku']} ({i.get('numero_certificado') or 'sem numero'})" for i in outros])
+            + "."
+        )
+    if link_result.get("not_found_in_linx"):
+        parts.append("Nao encontrados no Linx: " + _sample(link_result["not_found_in_linx"]) + ".")
+    if link_result.get("invalid"):
+        parts.append(f"{len(link_result['invalid'])} SKU(s) invalido(s).")
+    return " ".join(parts)
+
+
+def _discard_empty_certificate(cert_id: str, pdf_filename: str | None) -> bool:
+    """Desfaz um certificado recem-criado que ficou SEM item nenhum.
+
+    O `NOT EXISTS` cobre inclusive item ja removido: a linha com historico nunca
+    e apagada por aqui (mesma regra do DELETE administrativo, FK RESTRICT).
+
+    Returns:
+        True quando a linha foi apagada (e o PDF, se havia, removido do disco).
+    """
+    try:
+        with db() as (conn, cur):
+            cur.execute(
+                "DELETE FROM cert_certificates WHERE id = %s AND NOT EXISTS "
+                "(SELECT 1 FROM cert_certificate_items WHERE certificate_id = %s)",
+                [cert_id, cert_id],
+            )
+            removed = cur.rowcount > 0
+    except Exception as exc:
+        log.error(f"Could not discard empty certificate {cert_id}: type={type(exc).__name__}")
+        return False
+    if removed and pdf_filename:
+        (CERTS_DIR / pdf_filename).unlink(missing_ok=True)
+    return removed
 
 
 def _other_active_certificates(cur, cert_id: str, brand: str, skus: list[str]) -> dict:
@@ -249,7 +365,8 @@ def _link_skus_locked(cert: dict, skus: list[str], actor: str | None, dry_run: b
 
     Cada SKU cai em exatamente um balde:
 
-    - `invalid`: vazio ou acima de 100 caracteres;
+    - `invalid`: vazio, acima de 100 caracteres, com caractere de controle ou
+      com cara de data (`_sku_problem`);
     - `already_linked`: ja vinculado a ESTE certificado (vinculo vivo);
     - `linked_to_other_active_cert`: vinculo vivo em OUTRO certificado ATIVO —
       a dupla certificacao e decisao do time fiscal, nao do sistema, entao aqui
@@ -277,8 +394,8 @@ def _link_skus_locked(cert: dict, skus: list[str], actor: str | None, dry_run: b
         "linx": [],
     }
 
-    candidatos = [s for s in skus if s and len(s) <= 100]
-    out["invalid"] = [s for s in skus if not s or len(s) > 100]
+    candidatos = [s for s in skus if _sku_problem(s) is None]
+    out["invalid"] = [s for s in skus if _sku_problem(s) is not None]
     if not candidatos:
         return out
 
@@ -377,8 +494,14 @@ def create_certificate(
     Returns:
         The created certificate record (serialized) with `items` e `link_result`.
 
+    Um certificado nunca fica gravado SEM produto: o lock de vinculo e tomado
+    antes do INSERT e, se nenhum SKU do pedido pode ser vinculado, nada e
+    gravado (ou o registro recem-criado e desfeito).
+
     Raises:
-        HTTPException: 400 on invalid input, 500 if the database is unavailable.
+        HTTPException: 400 on invalid input or when no SKU can be linked, 409
+            when another linking operation holds the lock, 500 if the database
+            is unavailable.
     """
     if not DATABASE_URL:
         raise HTTPException(500, "Banco de dados nao configurado")
@@ -404,6 +527,7 @@ def create_certificate(
     lista = _parse_skus(skus)
     if sku and sku not in lista:
         lista.insert(0, sku)
+    _reject_dates_in_sku_list(lista)
     if len(lista) > _MAX_ITEMS_PER_REQUEST:
         raise HTTPException(400, f"Vincule no maximo {_MAX_ITEMS_PER_REQUEST} SKUs por vez")
 
@@ -421,26 +545,9 @@ def create_certificate(
     effective_created_by = _actor(request, created_by)
 
     cert_id = str(uuid.uuid4())
-    pdf_filename = _save_pdf(pdf, cert_id) if pdf is not None and pdf.filename else None
-
-    with db() as (conn, cur):
-        cur.execute(
-            """
-            INSERT INTO cert_certificates
-                (id, sku, brand, validade_certificado, fim_venda, situacao,
-                 vencimento_licenciamento, numero_certificado, ocp,
-                 orgao_certificador, pdf_filename, linx_status, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
-            """,
-            [
-                cert_id, lista[0], brand,
-                validade_certificado or None, fim_venda or None, situacao,
-                vencimento_licenciamento or None,
-                numero_certificado or None, ocp or None, orgao_certificador or None,
-                pdf_filename, effective_created_by,
-            ],
-        )
-
+    # O anexo e VALIDADO aqui e so vai para o disco depois do INSERT.
+    pdf_bytes = _read_pdf(pdf) if pdf is not None and pdf.filename else None
+    pdf_filename = f"{cert_id}.pdf" if pdf_bytes is not None else None
     cert = {
         "id": cert_id,
         "brand": brand,
@@ -448,7 +555,70 @@ def create_certificate(
         "fim_venda": fim_venda or None,
         "vencimento_licenciamento": vencimento_licenciamento or None,
     }
-    link_result = _link_skus(cert, lista, effective_created_by, dry_run=False)
+
+    # O lock vem ANTES do INSERT: com ele depois, um lock ocupado devolvia 409
+    # com o certificado ja gravado — um orfao sem item que o operador recadastrava
+    # por cima (e batia no indice unico do numero).
+    with sheet_sync_lock(_CERTIFICATE_LINK_LOCK_KEY) as acquired:
+        if not acquired:
+            raise HTTPException(409, "Outro vinculo de certificacao esta em andamento; tente novamente")
+
+        # Previa com o que o banco ja sabe: se NENHUM SKU pode ser vinculado, nao
+        # ha por que gravar certificado, PDF ou qualquer coisa.
+        previa = _link_skus_locked(cert, lista, effective_created_by, dry_run=True)
+        if not previa["added"]:
+            raise HTTPException(400, _nothing_linked_detail(previa))
+
+        try:
+            with db() as (conn, cur):
+                cur.execute(
+                    """
+                    INSERT INTO cert_certificates
+                        (id, sku, brand, validade_certificado, fim_venda, situacao,
+                         vencimento_licenciamento, numero_certificado, ocp,
+                         orgao_certificador, pdf_filename, linx_status, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s)
+                    """,
+                    [
+                        cert_id, lista[0], brand,
+                        validade_certificado or None, fim_venda or None, situacao,
+                        vencimento_licenciamento or None,
+                        numero_certificado or None, ocp or None, orgao_certificador or None,
+                        pdf_filename, effective_created_by,
+                    ],
+                )
+        except pg_errors.UniqueViolation as exc:
+            # Indice unico (brand, numero_certificado). Sem este tratamento o
+            # operador via um 500 opaco e recadastrava sem saber o motivo.
+            raise HTTPException(
+                409,
+                f"Ja existe um certificado cadastrado com o numero '{numero_certificado}' para a marca "
+                f"'{brand}'. Abra o certificado existente na lista e vincule os produtos a ele.",
+            ) from exc
+
+        try:
+            if pdf_bytes is not None and pdf_filename:
+                _store_pdf(pdf_bytes, pdf_filename)
+            link_result = _link_skus_locked(cert, lista, effective_created_by, dry_run=False)
+        except Exception as exc:
+            # Falha no meio do caminho: so desfaz se NENHUM item chegou a existir.
+            # O log e o unico rastro do cadastro desfeito (a gravacao no Linx de um
+            # SKU, se chegou a acontecer, tem a propria linha de log no linx_service).
+            discarded = _discard_empty_certificate(cert_id, pdf_filename)
+            log.error(
+                f"Certificate {cert_id} creation failed (type={type(exc).__name__}); "
+                f"empty record discarded={discarded}"
+            )
+            raise
+
+        # "Existe no Linx?" so o ERP responde, e so na gravacao. Se nenhum SKU
+        # passou, nada foi escrito no Linx e o certificado recem-criado e desfeito
+        # em vez de ficar sem produto.
+        if not link_result["added"]:
+            detail = _nothing_linked_detail(link_result)
+            if not _discard_empty_certificate(cert_id, pdf_filename):
+                detail += " O registro do certificado nao pode ser desfeito automaticamente; avise a TI."
+            raise HTTPException(400, detail)
 
     # Resultado do lote: erro de um SKU nao pode ser escondido pelo primeiro.
     resultados_linx = list(link_result["linx"])
@@ -457,7 +627,7 @@ def create_certificate(
             "status": "pending", "produto_codigo": None,
             "error": "Lote incompleto: existem SKUs nao vinculados; consulte link_result", "details": [],
         })
-    prioridade = {"error": 0, "pending": 1, "disabled": 2, "applied": 3}
+    prioridade = _LINX_STATUS_PRIORITY
     linx = min(resultados_linx, key=lambda item: prioridade.get(item["status"], 0)) if resultados_linx else {
         "status": "pending", "produto_codigo": None,
         "error": "Nenhum SKU novo foi vinculado", "details": [],
@@ -666,6 +836,7 @@ def link_certificate_items(request: Request, cert_id: str, req: CertificateItems
     lista = _parse_skus("\n".join(req.skus or []))
     if not lista:
         raise HTTPException(400, "Informe ao menos um SKU")
+    _reject_dates_in_sku_list(lista)
     if len(lista) > _MAX_ITEMS_PER_REQUEST:
         raise HTTPException(400, f"Vincule no maximo {_MAX_ITEMS_PER_REQUEST} SKUs por vez")
 
@@ -679,6 +850,46 @@ def link_certificate_items(request: Request, cert_id: str, req: CertificateItems
             f"{len(result['not_found_in_linx'])} fora do Linx"
         )
     return result
+
+
+def _apply_item_restriction(
+    cur, cert: dict, item: dict, situacao: str | None, fim_venda: date | None, reason: str, actor: str | None
+) -> dict:
+    """Grava a restricao local de UM item e o evento de auditoria (antes/depois).
+
+    Unico ponto de escrita da restricao por item: usado pelo PATCH individual e
+    pela carga em lote, para que os dois deixem exatamente o mesmo rastro em
+    `cert_certificate_item_restriction_events`. Nunca chama o Linx: o item fica
+    `pending` ate o reenvio. O chamador ja validou a coerencia e detem o lock.
+    """
+    proposed = {"situacao": situacao, "fim_venda": fim_venda}
+    before = {"situacao": item.get("situacao"), "fim_venda": item.get("fim_venda"), **_item_restriction(item, cert)}
+    after = {**proposed, **_item_restriction(proposed, cert)}
+    cur.execute(
+        "UPDATE cert_certificate_items SET situacao=%s, fim_venda=%s, restriction_updated_at=NOW(), "
+        "restriction_updated_by=%s, linx_status='pending', linx_applied_at=NULL, "
+        "linx_error='Restricao local alterada; envio ao Linx pendente', linx_detail=NULL "
+        "WHERE id=%s RETURNING *", [situacao, fim_venda, actor, item["id"]],
+    )
+    updated = dict(cur.fetchone())
+    _insert_restriction_event(cur, item["id"], before, after, reason, actor)
+    return updated
+
+
+def _insert_restriction_event(cur, item_id, before: dict, after: dict, reason: str, actor: str | None) -> None:
+    cur.execute(
+        "INSERT INTO cert_certificate_item_restriction_events (item_id,before_state,after_state,reason,actor) "
+        "VALUES (%s,%s::jsonb,%s::jsonb,%s,%s)",
+        [item_id, json.dumps(before, default=str), json.dumps(after, default=str), reason, actor],
+    )
+
+
+def _mark_certificate_pending(cur, cert_id: str) -> None:
+    cur.execute(
+        "UPDATE cert_certificates SET linx_status='pending', linx_applied_at=NULL, "
+        "linx_error='Restricao de item alterada; envio ao Linx pendente', updated_at=NOW() WHERE id=%s",
+        [cert_id],
+    )
 
 
 @router.patch("/api/certificates/{cert_id}/items/{sku}/restriction")
@@ -728,26 +939,318 @@ def update_item_restriction(request: Request, cert_id: str, sku: str, req: Certi
                 return _serialize_item(item, cert)
             if effective["situacao_efetiva"] == "ATIVO" and _other_active_certificates(cur, cert_id, cert["brand"], [sku]):
                 raise HTTPException(409, "SKU possui outro vinculo ativo; resolver dupla certificacao antes de reativar")
-            before = {"situacao": item.get("situacao"), "fim_venda": item.get("fim_venda"), **_item_restriction(item, cert)}
-            after = {**proposed, **effective}
-            cur.execute(
-                "UPDATE cert_certificate_items SET situacao=%s, fim_venda=%s, restriction_updated_at=NOW(), "
-                "restriction_updated_by=%s, linx_status='pending', linx_applied_at=NULL, "
-                "linx_error='Restricao local alterada; envio ao Linx pendente', linx_detail=NULL "
-                "WHERE id=%s RETURNING *", [req.situacao, req.fim_venda, actor, item["id"]],
-            )
-            updated = dict(cur.fetchone())
-            cur.execute(
-                "UPDATE cert_certificates SET linx_status='pending', linx_applied_at=NULL, "
-                "linx_error='Restricao de item alterada; envio ao Linx pendente', updated_at=NOW() WHERE id=%s",
-                [cert_id],
-            )
-            cur.execute(
-                "INSERT INTO cert_certificate_item_restriction_events (item_id,before_state,after_state,reason,actor) "
-                "VALUES (%s,%s::jsonb,%s::jsonb,%s,%s)",
-                [item["id"], json.dumps(before, default=str), json.dumps(after, default=str), reason, actor],
-            )
+            updated = _apply_item_restriction(cur, cert, item, req.situacao, req.fim_venda, reason, actor)
+            _mark_certificate_pending(cur, cert_id)
             return _serialize_item(updated, cert)
+
+
+# ---------------------------------------------------------------------------
+# Carga em lote "SKU;data" — lista de produtos e suas respectivas datas
+# ---------------------------------------------------------------------------
+
+_BATCH_SEPARATORS = re.compile(r"[;,\t]")
+_BATCH_SKU_SPACE_DATE = re.compile(r"^(\S+)\s+(\S+)$")
+_MAX_BATCH_LINE_LENGTH = 200
+_MAX_BATCH_REASON_LENGTH = 1000
+_MAX_BATCH_RAW_LINES = 2000  # contando as linhas em branco do texto colado
+_BATCH_ACTIONS = ("encerrar", "sem_alteracao", "vincular", "vincular_e_encerrar")
+
+
+def _br(value: date) -> str:
+    return value.strftime("%d/%m/%Y")
+
+
+def _parse_batch_lines(linhas: list[str]) -> list[dict]:
+    """Interpreta as linhas coladas (`SKU` ou `SKU;data`) — sem tocar no banco.
+
+    Separador: `;`, TAB (colado de duas colunas do Excel) ou virgula; tambem
+    aceita `SKU data` separado por espaco quando o segundo trecho e uma data. A
+    data passa pelo parser unico do projeto (`parse_data_real`: dd/mm/aaaa, ISO,
+    e nunca a sentinela 01/01/1900).
+
+    Linha em branco e pulada, mas a numeracao (`linha`) e a da caixa de texto,
+    para o operador achar o erro onde ele esta. Toda linha nao vazia volta com
+    `status` "ok", "erro" (com `mensagem`) ou "ignorada" (repeticao identica).
+    """
+    rows: list[dict] = []
+    for numero, raw in enumerate(linhas, start=1):
+        texto = str(raw).replace("\r", "").strip()
+        if not texto:
+            continue
+        row: dict = {
+            "linha": numero, "conteudo": texto[:_MAX_BATCH_LINE_LENGTH], "sku": None, "fim_venda": None,
+            "acao": None, "status": "ok", "mensagem": "", "aviso": None,
+        }
+        rows.append(row)
+
+        if len(texto) > _MAX_BATCH_LINE_LENGTH:
+            row.update(status="erro", mensagem=f"Linha excede {_MAX_BATCH_LINE_LENGTH} caracteres")
+            continue
+        campos = [c.strip() for c in _BATCH_SEPARATORS.split(texto)]
+        if len(campos) == 1:
+            por_espaco = _BATCH_SKU_SPACE_DATE.match(campos[0])
+            if por_espaco and _looks_like_date(por_espaco.group(2)):
+                campos = [por_espaco.group(1), por_espaco.group(2)]
+        while len(campos) > 1 and campos[-1] == "":
+            campos.pop()  # "SKU;" ou a coluna de data vazia do Excel: so o SKU
+        if len(campos) > 2:
+            row.update(status="erro", mensagem="Use um produto por linha, no formato SKU ou SKU;data")
+            continue
+
+        sku = campos[0]
+        problema = _sku_problem(sku)
+        if problema:
+            if sku and _looks_like_date(sku):
+                problema += "; o formato e SKU;data"
+            row.update(status="erro", mensagem=problema)
+            continue
+        row["sku"] = sku
+
+        if len(campos) == 2:
+            data = parse_data_real(campos[1])
+            if data is None:
+                row.update(status="erro", mensagem=f"Data invalida: '{campos[1]}'. Use dd/mm/aaaa (ex.: 30/10/2026)")
+                continue
+            row["fim_venda"] = data.isoformat()
+
+    # Mesmo SKU duas vezes: identico e ignorado; com datas diferentes ninguem
+    # adivinha qual vale — erro nas duas linhas.
+    por_sku: dict[str, list[dict]] = {}
+    for row in rows:
+        if row["status"] == "ok":
+            por_sku.setdefault(row["sku"], []).append(row)
+    for grupo in por_sku.values():
+        if len(grupo) < 2:
+            continue
+        numeros = ", ".join(str(r["linha"]) for r in grupo)
+        if len({r["fim_venda"] for r in grupo}) > 1:
+            for row in grupo:
+                row.update(status="erro", mensagem=f"SKU repetido com datas diferentes (linhas {numeros})")
+            continue
+        for row in grupo[1:]:
+            row.update(status="ignorada", acao="sem_alteracao",
+                       mensagem=f"Linha repetida (igual a linha {grupo[0]['linha']}); ignorada")
+    return rows
+
+
+def _plan_items_batch(cur, cert: dict, rows: list[dict], encerrar_com_data: bool, for_update: bool) -> dict:
+    """Decide, com o que o BANCO sabe, o que cada linha valida fara.
+
+    Acoes: `vincular` (SKU novo, herda o certificado), `vincular_e_encerrar`
+    (SKU novo ja com fim de venda), `encerrar` (item ja vinculado recebe
+    ENCERRADO + fim de venda) e `sem_alteracao`. Nao chama o Linx — "o SKU existe
+    no ERP?" so se descobre na gravacao, como no vinculo simples.
+
+    Returns:
+        `{sku: linha do item}` dos SKUs ja vinculados a este certificado.
+    """
+    cert_id = str(cert["id"])
+    ativos = [r for r in rows if r["status"] == "ok"]
+    skus = [r["sku"] for r in ativos]
+    vinculados: dict[str, dict] = {}
+    em_outro: dict = {}
+    if skus:
+        cur.execute(
+            "SELECT * FROM cert_certificate_items WHERE certificate_id = %s AND removed_at IS NULL "
+            "AND sku = ANY(%s)" + (" FOR UPDATE" if for_update else ""),
+            [cert_id, skus],
+        )
+        vinculados = {r["sku"]: dict(r) for r in cur.fetchall() if r["sku"] in skus}
+        novos = [sku for sku in skus if sku not in vinculados]
+        if novos:
+            em_outro = _other_active_certificates(cur, cert_id, cert["brand"], novos)
+
+    hoje = datetime.now(BUSINESS_TIMEZONE).date()
+    for row in ativos:
+        sku = row["sku"]
+        data = date.fromisoformat(row["fim_venda"]) if row["fim_venda"] else None
+        item = vinculados.get(sku)
+        if data is not None and not encerrar_com_data:
+            row.update(status="erro", mensagem=(
+                "Linha com data, mas o encerramento nao foi confirmado: item ativo nao possui fim de venda "
+                "por certificacao. Confirme o encerramento dos itens com data ou remova a data"
+            ))
+            continue
+        if item is None and sku in em_outro:
+            row.update(status="erro", mensagem=(
+                f"SKU vinculado a outro certificado ativo ({em_outro[sku] or 'sem numero'}); "
+                "resolva a dupla certificacao antes de vincular aqui"
+            ))
+            continue
+        if data is not None and data < hoje:
+            row["aviso"] = f"Data no passado ({_br(data)}): a venda deste item ja fica encerrada"
+
+        if item is None:
+            if data is None:
+                row.update(acao="vincular", mensagem="Vincular ao certificado (herda a situacao do certificado)")
+            else:
+                row.update(acao="vincular_e_encerrar",
+                           mensagem=f"Vincular ao certificado e encerrar o item com fim de venda em {_br(data)}")
+            continue
+        if data is None:
+            row.update(acao="sem_alteracao", mensagem="Ja vinculado a este certificado; sem data, nada muda")
+            continue
+        atual = parse_data_real(item.get("fim_venda"))
+        if item.get("situacao") == "ENCERRADO" and atual == data:
+            row.update(acao="sem_alteracao", mensagem=f"Item ja encerrado com fim de venda em {_br(data)}")
+            continue
+        substitui = f" (substitui {_br(atual)})" if atual else ""
+        row.update(acao="encerrar", mensagem=f"Encerrar o item com fim de venda em {_br(data)}{substitui}")
+    return vinculados
+
+
+def _batch_response(rows: list[dict], dry_run: bool) -> dict:
+    resumo = {acao: sum(1 for r in rows if r["status"] != "erro" and r["acao"] == acao) for acao in _BATCH_ACTIONS}
+    resumo["erro"] = sum(1 for r in rows if r["status"] == "erro")
+    return {
+        "dry_run": dry_run,
+        # Tudo-ou-nada: com UMA linha em erro nada e gravado, nem as linhas boas.
+        "valid": resumo["erro"] == 0,
+        "total_linhas": len(rows),
+        "resumo": resumo,
+        "linhas": rows,
+    }
+
+
+def _batch_errors_detail(rows: list[dict]) -> str:
+    erros = [r for r in rows if r["status"] == "erro"]
+    mostrados = "; ".join(f"Linha {r['linha']}: {r['mensagem']}" for r in erros[:5])
+    resto = f" (e mais {len(erros) - 5})" if len(erros) > 5 else ""
+    return f"Lote recusado, nada foi gravado: {len(erros)} linha(s) com erro. {mostrados}{resto}"
+
+
+def _link_batch_row(cert: dict, row: dict, reason: str, actor: str | None) -> None:
+    """Vincula UM SKU novo do lote (com ou sem encerramento) e registra o resultado na linha."""
+    sku = row["sku"]
+    data = date.fromisoformat(row["fim_venda"]) if row["fim_venda"] else None
+    proposto = {"sku": sku, "situacao": "ENCERRADO", "fim_venda": data} if data else {"sku": sku}
+    linx = _item_linx_result(cert["brand"], proposto, cert)
+    if linx.get("produto_codigo") is None and "nao encontrado" in (linx.get("error") or ""):
+        row.update(status="falhou", mensagem="SKU nao encontrado no Linx; nao foi vinculado")
+        return
+
+    applied_at = datetime.now(UTC) if linx["status"] == "applied" else None
+    columns = ["certificate_id", "sku", "brand", "produto_codigo", "linx_status", "linx_error", "linx_detail",
+               "linx_applied_at", "added_by"]
+    values = [str(cert["id"]), sku, cert["brand"], linx.get("produto_codigo"), linx["status"], linx.get("error"),
+              json.dumps(linx.get("details", [])), applied_at, actor]
+    if data:
+        # As colunas de restricao so entram quando ha data: o vinculo simples
+        # continua independente da migration 20260912.
+        columns += ["situacao", "fim_venda", "restriction_updated_at", "restriction_updated_by"]
+        values += ["ENCERRADO", data, datetime.now(UTC), actor]
+    placeholders = ", ".join("%s::jsonb" if c == "linx_detail" else "%s" for c in columns)
+    try:
+        with db() as (conn, cur):
+            cur.execute(
+                f"INSERT INTO cert_certificate_items ({', '.join(columns)}) VALUES ({placeholders}) RETURNING id",
+                values,
+            )
+            item_id = cur.fetchone()["id"]
+            if data:
+                depois = {"situacao": "ENCERRADO", "fim_venda": data}
+                _insert_restriction_event(
+                    cur, item_id,
+                    {"vinculado": False, "situacao": None, "fim_venda": None},
+                    {"vinculado": True, **depois, **_item_restriction(depois, cert)},
+                    reason, actor,
+                )
+    except pg_errors.UniqueViolation:
+        row.update(status="falhou", mensagem="SKU vinculado por outro operador durante a gravacao; refaca a previa")
+        return
+    row.update(status="aplicado", linx_status=linx["status"], linx_error=linx.get("error"))
+
+
+@router.post("/api/certificates/{cert_id}/items/batch")
+@limiter.limit("30/minute")
+def batch_certificate_items(request: Request, cert_id: str, req: CertificateItemsBatchRequest) -> dict:
+    """Carga em lote de produtos e datas de um certificado (`SKU` ou `SKU;data`).
+
+    Pedido do time fiscal (17/09/2026): atualizar muitos produtos de um
+    certificado pela tela, sem depender da TI. Linha com data = ENCERRAR aquele
+    item com aquele fim de venda (mesma regra e mesma auditoria do PATCH de
+    restricao individual); linha sem data = apenas vincular.
+
+    - A validacao e do SERVIDOR e e por linha (`linhas[].status == "erro"` com
+      numero, conteudo e motivo). Com qualquer linha em erro NADA e gravado.
+    - `dry_run=true` (padrao) e a previa obrigatoria: nao grava nem chama o Linx.
+    - `motivo` e unico para o lote e vai para o evento de auditoria de cada item.
+    - `encerrar_itens_com_data` confirma que as datas encerram os itens; sem
+      ela, data em item ativo e erro ("item ativo nao possui fim de venda").
+    - Item JA vinculado fica `pending` (como no PATCH, nunca chama o Linx); SKU
+      novo segue o vinculo simples, que tenta o Linx na hora com a data do item.
+
+    Raises:
+        HTTPException: 400 envelope invalido (motivo, vazio, mais de 500 linhas),
+            404 certificado inexistente, 409 lock ocupado, 422 gravacao pedida com
+            linha em erro.
+    """
+    reason = req.motivo.strip()
+    if not reason:
+        raise HTTPException(400, "Informe o motivo do lote (vai para a auditoria de cada item)")
+    if len(reason) > _MAX_BATCH_REASON_LENGTH:
+        raise HTTPException(400, f"O motivo excede {_MAX_BATCH_REASON_LENGTH} caracteres")
+    if len(req.linhas) > _MAX_BATCH_RAW_LINES:
+        # Linhas em branco nao contam para o teto de 500, mas tambem nao podem
+        # virar um laco de milhoes de iteracoes.
+        raise HTTPException(400, f"Texto com linhas demais ({len(req.linhas)}); envie no maximo {_MAX_BATCH_RAW_LINES}")
+    preenchidas = sum(1 for linha in req.linhas if str(linha).strip())
+    if preenchidas == 0:
+        raise HTTPException(400, "Informe ao menos uma linha no formato SKU ou SKU;data")
+    if preenchidas > _MAX_ITEMS_PER_REQUEST:
+        raise HTTPException(400, f"Envie no maximo {_MAX_ITEMS_PER_REQUEST} linhas por vez")
+
+    rows = _parse_batch_lines(req.linhas)
+    cert = _load_certificate(cert_id)
+
+    if req.dry_run:
+        with db() as (conn, cur):
+            _plan_items_batch(cur, cert, rows, req.encerrar_itens_com_data, for_update=False)
+        return _batch_response(rows, dry_run=True)
+
+    actor = _actor(request)
+    with sheet_sync_lock(_CERTIFICATE_LINK_LOCK_KEY) as acquired:
+        if not acquired:
+            raise HTTPException(409, "Outro vinculo de certificacao esta em andamento; tente novamente")
+        # 1) Revalida SOB o lock e encerra os itens ja vinculados em UMA transacao:
+        #    ou todos mudam, ou nenhum.
+        with db() as (conn, cur):
+            cur.execute("SELECT * FROM cert_certificates WHERE id=%s FOR UPDATE", [cert_id])
+            current = cur.fetchone()
+            if not current:
+                raise HTTPException(404, "Certificado nao encontrado")
+            cert = dict(current)
+            vinculados = _plan_items_batch(cur, cert, rows, req.encerrar_itens_com_data, for_update=True)
+            if any(r["status"] == "erro" for r in rows):
+                raise HTTPException(422, _batch_errors_detail(rows))
+            encerrar = [r for r in rows if r["status"] == "ok" and r["acao"] == "encerrar"]
+            for row in encerrar:
+                _apply_item_restriction(
+                    cur, cert, vinculados[row["sku"]], "ENCERRADO", date.fromisoformat(row["fim_venda"]), reason, actor
+                )
+                row["status"] = "aplicado"
+            if encerrar:
+                _mark_certificate_pending(cur, cert_id)
+        # 2) SKUs novos: um a um, porque cada vinculo conversa com o Linx (que nao
+        #    participa da transacao). Falha de um SKU fica na linha dele.
+        for row in rows:
+            if row["status"] == "ok" and row["acao"] in ("vincular", "vincular_e_encerrar"):
+                _link_batch_row(cert, row, reason, actor)
+        for row in rows:
+            if row["status"] == "ok":
+                row["status"] = "aplicado"  # sem_alteracao: conferido, nada a gravar
+
+        result = _batch_response(rows, dry_run=False)
+        with db() as (conn, cur):
+            result["items"] = _fetch_active_items(cur, cert_id, cert)
+
+    resumo = result["resumo"]
+    log.info(
+        f"Certificate {cert_id}: lote aplicado — {resumo['encerrar']} encerrado(s), "
+        f"{resumo['vincular'] + resumo['vincular_e_encerrar']} vinculado(s), "
+        f"{sum(1 for r in rows if r['status'] == 'falhou')} falha(s)"
+    )
+    return result
 
 
 @router.delete("/api/certificates/{cert_id}/items/{sku}")
@@ -871,7 +1374,7 @@ def retry_linx(request: Request, cert_id: str) -> dict:
                                 "error_type": type(exc).__name__}, ensure_ascii=True))
         raise
     status = result.get("linx_status")
-    status = status if status in {"applied", "pending", "disabled", "error"} else "unknown"
+    status = status if status in _LINX_STATUS_PRIORITY else "unknown"
     log.info(json.dumps({**audit, "phase": "failed" if status == "error" else "finished",
                          "status": status}, ensure_ascii=True))
     return result
@@ -926,7 +1429,7 @@ def _retry_linx_locked(request: Request, cert_id: str) -> dict:
             resultados.append({"sku": sku, **resultado})
 
         # Um item com erro nao pode ser escondido pelo sucesso do primeiro SKU.
-        priority = {"error": 0, "pending": 1, "disabled": 2, "applied": 3}
+        priority = _LINX_STATUS_PRIORITY
         linx = min(resultados, key=lambda item: priority.get(item["status"], 0))
         applied_at = datetime.now(UTC) if linx["status"] == "applied" else None
         cur.execute(

@@ -195,7 +195,10 @@ def test_write_nunca_grava_validade_de_certificado(monkeypatch):
     out = linx_service.write_certificate_to_linx("puket", "SKU", "2027-03-22", None)
 
     assert calls == []
-    assert out["status"] == "applied"
+    # C5: nenhum upsert aconteceu, entao o status NAO pode ser "applied" — a tela
+    # mostrava "Gravado no Linx" sem nada ter sido gravado.
+    assert out["status"] == "skipped"
+    assert out["error"] is None
     assert any(d["action"] == "skipped (sem valor)" for d in out["details"])
 
 
@@ -219,6 +222,10 @@ def test_write_recusa_data_de_certificacao_para_certificado_ativo(monkeypatch):
         d["action"] == linx_service.ACAO_ATIVO_SEM_DATA and d["prop"] == "00224"
         for d in out["details"]
     )
+    # C5: certificado ativo nao grava nada — o resultado e "skipped", nao "applied".
+    assert calls == []
+    assert out["status"] == "skipped"
+    assert out["produto_codigo"] == "P-1"
 
 
 class TestResolveWhenSkuIsProduto:

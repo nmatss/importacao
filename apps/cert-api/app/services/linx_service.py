@@ -201,7 +201,11 @@ def write_certificate_to_linx(
 
     Returns:
         Dict with keys:
-            status: 'applied' | 'disabled' | 'error'
+            status: 'applied' | 'skipped' | 'disabled' | 'error'. 'applied' so
+                quando ao menos UM upsert aconteceu; 'skipped' quando o Linx esta
+                ligado e o produto existe, mas nao havia nada a gravar (caso do
+                certificado ATIVO) — antes isso saia como 'applied' e a tela
+                dizia "Gravado no Linx" sem nada ter sido gravado.
             produto_codigo: resolved product code (when applicable)
             details: per-property result list
             error: error message when status == 'error'
@@ -260,6 +264,7 @@ def write_certificate_to_linx(
         ),
     ]
 
+    gravou = False
     try:
         for field, prop_code, raw_value in targets:
             valor = _format_date(raw_value)
@@ -274,6 +279,7 @@ def write_certificate_to_linx(
                 )
                 continue
             action = upsert_produto_propriedade(brand, produto, prop_code, valor)
+            gravou = True
             result["details"].append(
                 {"field": field, "prop": prop_code, "valor": valor, "action": action}
             )
@@ -295,7 +301,7 @@ def write_certificate_to_linx(
         )
         return result
 
-    result["status"] = "applied"
+    result["status"] = "applied" if gravou else "skipped"
     return result
 
 
