@@ -181,15 +181,19 @@ def _write_item_to_linx(brand: str, sku: str, fim_venda: str | None, vencimento:
     )
 
 
-def _save_pdf(file: UploadFile, cert_id: str) -> str:
-    """Persist an uploaded certificate PDF to CERTS_DIR.
+def _read_pdf(file: UploadFile) -> bytes:
+    """Validate an uploaded certificate PDF and return its bytes (nothing is stored).
+
+    A validacao roda ANTES do INSERT (um anexo invalido nao pode custar uma linha
+    no banco) e a gravacao em disco so DEPOIS dele (`_store_pdf`): com o arquivo
+    salvo primeiro, qualquer falha do INSERT — numero de certificado repetido,
+    banco fora — deixava um PDF orfao em CERTS_DIR.
 
     Args:
         file: The uploaded file.
-        cert_id: Certificate UUID, used to name the stored file.
 
     Returns:
-        The stored filename (basename only).
+        The validated PDF content.
 
     Raises:
         HTTPException: 400 if the file is not a PDF or exceeds the size limit.
@@ -208,9 +212,12 @@ def _save_pdf(file: UploadFile, cert_id: str) -> str:
     # Content-Type / renamed binary from being stored as a certificate.
     if not data.startswith(b"%PDF-"):
         raise HTTPException(400, "Arquivo nao e um PDF valido")
-    stored = f"{cert_id}.pdf"
+    return data
+
+
+def _store_pdf(data: bytes, stored: str) -> None:
+    """Persist already-validated PDF bytes to CERTS_DIR under `stored`."""
     (CERTS_DIR / stored).write_bytes(data)
-    return stored
 
 
 def _sample(values: list[str], limit: int = 10) -> str:
@@ -475,6 +482,9 @@ def create_certificate(
     effective_created_by = _actor(request, created_by)
 
     cert_id = str(uuid.uuid4())
+    # O anexo e VALIDADO aqui e so vai para o disco depois do INSERT.
+    pdf_bytes = _read_pdf(pdf) if pdf is not None and pdf.filename else None
+    pdf_filename = f"{cert_id}.pdf" if pdf_bytes is not None else None
     cert = {
         "id": cert_id,
         "brand": brand,
@@ -496,7 +506,6 @@ def create_certificate(
         if not previa["added"]:
             raise HTTPException(400, _nothing_linked_detail(previa))
 
-        pdf_filename = _save_pdf(pdf, cert_id) if pdf is not None and pdf.filename else None
         try:
             with db() as (conn, cur):
                 cur.execute(
@@ -515,6 +524,18 @@ def create_certificate(
                         pdf_filename, effective_created_by,
                     ],
                 )
+        except pg_errors.UniqueViolation as exc:
+            # Indice unico (brand, numero_certificado). Sem este tratamento o
+            # operador via um 500 opaco e recadastrava sem saber o motivo.
+            raise HTTPException(
+                409,
+                f"Ja existe um certificado cadastrado com o numero '{numero_certificado}' para a marca "
+                f"'{brand}'. Abra o certificado existente na lista e vincule os produtos a ele.",
+            ) from exc
+
+        try:
+            if pdf_bytes is not None and pdf_filename:
+                _store_pdf(pdf_bytes, pdf_filename)
             link_result = _link_skus_locked(cert, lista, effective_created_by, dry_run=False)
         except Exception:
             # Falha no meio do caminho: so desfaz se NENHUM item chegou a existir.

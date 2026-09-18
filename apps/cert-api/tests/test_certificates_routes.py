@@ -1333,6 +1333,69 @@ async def test_create_discards_certificate_when_no_sku_exists_in_linx(
     assert list(tmp_path.glob("*.pdf")) == []
 
 
+# ---------------------------------------------------------------------------
+# C4 — numero de certificado repetido: 409 claro, sem PDF sobrando no disco
+# ---------------------------------------------------------------------------
+
+
+def _fail_certificate_insert(cur, exc: Exception) -> None:
+    original = cur.execute.side_effect
+
+    def _execute(sql, params=None):
+        if "INSERT INTO cert_certificates" in str(sql):
+            raise exc
+        return original(sql, params)
+
+    cur.execute.side_effect = _execute
+
+
+@pytest.mark.asyncio
+async def test_create_duplicate_certificate_number_returns_409_and_keeps_no_pdf(
+    test_client, api_key_headers, mocker, tmp_path
+):
+    """Indice unico (brand, numero_certificado): antes virava 500 opaco com o PDF ja salvo."""
+    from psycopg2 import errors as pg_errors
+
+    cur, linx = _mock_certificates_env(mocker, tmp_path=tmp_path)
+    _fail_certificate_insert(cur, pg_errors.UniqueViolation("cert_certificates_brand_numero_uniq"))
+    cur.rowcount = 0  # a linha nunca existiu: o DELETE de limpeza nao acha nada
+    response = await test_client.post(
+        CREATE_URL,
+        headers=api_key_headers,
+        data={
+            "sku": "A", "brand": "imaginarium", "validade_certificado": "2030-01-01",
+            "numero_certificado": "006083/2024",
+        },
+        files=_PDF,
+    )
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert "006083/2024" in detail and "ja existe" in detail.lower()
+    assert "cert_certificates_brand_numero_uniq" not in detail  # nada de nome de indice para o operador
+    assert list(tmp_path.glob("*.pdf")) == []
+    linx.assert_not_called()
+    assert not any("INSERT INTO cert_certificate_items" in sql for sql in _executed(cur))
+
+
+@pytest.mark.asyncio
+async def test_create_database_failure_on_insert_leaves_no_pdf_behind(
+    test_client, api_key_headers, mocker, tmp_path
+):
+    """Qualquer falha do INSERT: o PDF so vai para o disco DEPOIS da linha existir."""
+    cur, linx = _mock_certificates_env(mocker, tmp_path=tmp_path)
+    _fail_certificate_insert(cur, RuntimeError("connection lost"))
+    cur.rowcount = 0  # a linha nunca existiu: o DELETE de limpeza nao acha nada
+    with pytest.raises(RuntimeError):
+        await test_client.post(
+            CREATE_URL,
+            headers=api_key_headers,
+            data={"sku": "A", "brand": "imaginarium", "validade_certificado": "2030-01-01"},
+            files=_PDF,
+        )
+    assert list(tmp_path.glob("*.pdf")) == []
+    linx.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_create_keeps_certificate_when_at_least_one_sku_links(test_client, api_key_headers, mocker):
     """Lote parcial continua valendo: o certificado fica, com o aviso de lote incompleto."""
