@@ -217,6 +217,28 @@ def test_evidence_text_is_bounded():
     assert len(ma.extract_inmetro_text(product)) <= ma._MAX_EVIDENCE_CHARS
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Certificado pelo Inmetro. Fabricante ACME Ltda, CNPJ 12.345.678/0001-90.",
+        "Selo Inmetro na embalagem. SAC 0800-707-1234.",
+        "Selo Inmetro na embalagem. SAC 0800 7071234 ou (11) 4002-8922.",
+        "Produto com selo Inmetro. Centro de distribuicao: CEP 01310-100.",
+        "Selo do Inmetro. Fabricado em 12/03/2024, validade 2030-12.",
+    ],
+)
+def test_cnpj_phone_cep_and_dates_are_not_a_registration_number(texto):
+    """OK falso e o erro caro: o time deixaria de olhar o item. Numero que e
+    claramente outra coisa nao pode promover "Revisar" a "Conforme"."""
+    assert ma.has_certification_code(texto) is False
+    assert ma.classify("Puzzle", 100, texto)[0] == "REVISAR"
+
+
+def test_real_registration_next_to_a_cnpj_is_still_found():
+    texto = "CNPJ 12.345.678/0001-90. Registro Inmetro 004512/2024."
+    assert ma.classify("Puzzle", 100, texto)[0] == "OK"
+
+
 def test_house_only_product_is_out_of_scope():
     """Item vendido so pela propria loja ja e coberto pelo painel da planilha."""
     product = _product("Puzzle 60 pecas", seller_id=ma.HOUSE_SELLER_ID, seller_name="imaginarium")

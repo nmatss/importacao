@@ -115,9 +115,29 @@ class EmptyCategoryError(MarketplaceAuditError):
         )
 
 
+# Numeros que aparecem perto de "Inmetro" na descricao e NAO sao registro. Os
+# padroes de registro sao permissivos (`\d{4,}[/-]\d{2,4}`): sem esta mascara o
+# final de um CNPJ ("0001-90"), um 0800, um CEP ou uma data promoviam o item a
+# OK. OK falso e o erro caro aqui — na duvida o item fica em REVISAR.
+_NOT_A_REGISTRATION_RE = re.compile(
+    r"\d{2}\.?\d{3}\.?\d{3}/\d{4}-?\d{2}"  # CNPJ
+    r"|\b0800[\s.-]?\d{2,4}[\s.-]?\d{3,4}\b"  # 0800
+    r"|\(\d{2}\)\s?9?\d{4}[\s.-]?\d{4}\b"  # (11) 4002-8922
+    r"|\b(?:tel(?:efone)?|fone|sac|whats(?:app)?|contato)\b\W{0,3}[\d\s().-]{8,}"
+    r"|\b\d{5}-\d{3}\b"  # CEP
+    r"|\b\d{1,2}/\d{1,2}/\d{2,4}\b"  # 12/03/2024
+    r"|\b(?:19|20)\d{2}-\d{1,2}(?:-\d{1,2})?\b",  # 2030-12, 2024-03-12
+    re.IGNORECASE,
+)
+
+
 def has_certification_code(text: str) -> bool:
-    """True quando o texto traz um numero de registro reconhecivel."""
-    return bool(_REGISTRATION_RE.search(text or "")) or has_registration_number(text or "")
+    """True quando o texto traz um numero de registro reconhecivel.
+
+    CNPJ, telefone, CEP e data sao mascarados antes: nao sao registro.
+    """
+    limpo = _NOT_A_REGISTRATION_RE.sub(" ", text or "")
+    return bool(_REGISTRATION_RE.search(limpo)) or has_registration_number(limpo)
 
 
 def parse_pieces(text: str) -> int | None:
