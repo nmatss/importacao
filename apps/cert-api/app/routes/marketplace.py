@@ -11,7 +11,6 @@ from app.config import DATABASE_URL
 from app.db.postgres import db
 from app.services.marketplace_audit import (
     DEFAULT_CATEGORY_PATH,
-    DEFAULT_PIECES_THRESHOLD,
     MarketplaceAuditError,
     is_valid_category_path,
     run_audit,
@@ -63,12 +62,10 @@ def _active_run_id(now: float) -> str | None:
     return None
 
 
-def _run_audit_worker(
-    run_id: str, category_path: str, threshold: int = DEFAULT_PIECES_THRESHOLD
-) -> None:
+def _run_audit_worker(run_id: str, category_path: str) -> None:
     state = _running_audits[run_id]
     try:
-        result = run_audit(category_path=category_path, threshold=threshold)
+        result = run_audit(category_path=category_path)
         state.update(
             status="completed",
             summary=result["summary"],
@@ -95,7 +92,6 @@ def _run_audit_worker(
 def start_marketplace_audit(
     request: Request,
     category: str = Query(DEFAULT_CATEGORY_PATH, max_length=200),
-    threshold: int = Query(DEFAULT_PIECES_THRESHOLD, ge=1, le=100000),
 ) -> dict:
     """Dispara a auditoria em segundo plano.
 
@@ -125,7 +121,7 @@ def start_marketplace_audit(
         _remember(run_id, {"status": "running", "started_at": now})
     try:
         threading.Thread(
-            target=_run_audit_worker, args=(run_id, category, threshold), daemon=True
+            target=_run_audit_worker, args=(run_id, category), daemon=True
         ).start()
     except Exception as e:
         # Sem thread nao ha `finally` do worker: sem isto o run ficaria

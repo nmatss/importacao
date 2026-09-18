@@ -59,6 +59,21 @@ def _product(
         ("Quebra-cabeca 2 000 peças", 2000),
         ("Porta-Puzzle", None),
         ("", None),
+        # K10: so o numero IMEDIATAMENTE antes da unidade conta.
+        ("Puzzle 2 em 1 500 peças", 500),
+        ("Panorama 2 1000 peças", 1000),
+        ("Kit 3 puzzles 100 peças", 100),
+        ("Mapa do Brasil em 500 peças", 500),
+        ("Quebra-cabeca 500 pçs", 500),
+        ("Quebra-cabeca 500 pcs", 500),
+        ("Quebra-cabeca 500PCS", 500),
+        ("Quebra-cabeca 10.000 peças", 10000),
+        ("Quebra-cabeca 10 000 peças", 10000),
+        ("Puzzle 1 peça gigante", 1),
+        ("Puzzle 3D 216 Peças", 216),
+        # Numero absurdo nao pode estourar a coluna INTEGER e derrubar a gravacao.
+        ("Puzzle 99999999999 peças", None),
+        ("Puzzle 0 peças", None),
     ],
 )
 def test_parse_pieces(texto, esperado):
@@ -794,3 +809,29 @@ async def test_thread_that_fails_to_start_releases_the_slot(test_client, api_key
 
     thread.return_value.start.side_effect = None
     assert (await test_client.post("/api/marketplace/audit", headers=api_key_headers)).status_code == 200
+
+
+# --- K10: codigo morto removido ----------------------------------------------
+
+
+def test_dead_threshold_and_accessory_list_are_gone():
+    """O `threshold` nunca decidiu nada e a lista de acessorios nao tinha uso:
+    mante-los sugeria uma regra de 500 pecas que nao existe."""
+    import inspect
+
+    assert not hasattr(ma, "_ACCESSORY_RE")
+    assert not hasattr(ma, "DEFAULT_PIECES_THRESHOLD")
+    for func in (ma.classify, ma.audit_products, ma.audit_batch, ma.run_audit):
+        assert "threshold" not in inspect.signature(func).parameters
+
+
+@pytest.mark.asyncio
+async def test_legacy_threshold_query_param_is_ignored_not_rejected(
+    test_client, api_key_headers, audit_route
+):
+    _marketplace, thread = audit_route
+    resp = await test_client.post(
+        "/api/marketplace/audit", params={"threshold": 1}, headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    assert len(thread.call_args.kwargs["args"]) == 2

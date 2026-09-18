@@ -28,9 +28,6 @@ from app.db.postgres import db
 from app.services.cert_service import has_registration_number, strip_html
 from app.utils.logging import log
 
-# Parametro legado preservado no contrato; nao determina aplicabilidade.
-DEFAULT_PIECES_THRESHOLD = 500
-
 # O seller `1` e a propria loja (item de catalogo proprio, coberto pelo painel).
 HOUSE_SELLER_ID = "1"
 
@@ -55,7 +52,17 @@ _REQUEST_TIMEOUT = (5, 20)
 # 4xx (404, 403) nao melhora com insistencia e so castigaria o site.
 _RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
-_PIECES_RE = re.compile(r"(\d[\d.\s]*)\s*pe[çc]as?\b", re.IGNORECASE)
+# K10: so o numero IMEDIATAMENTE antes da unidade (pecas/pcs/pçs). O padrao
+# antigo `\d[\d.\s]*` colava numeros vizinhos: "2 em 1 500 pecas" virava 1500 e
+# "Panorama 2 1000 pecas" virava 21000. Milhar com ponto e aceito ("1.000");
+# com ESPACO so quando o grupo e "000" ("2 000"), a unica leitura possivel —
+# "1 500 pecas" e ambiguo ("2 em 1", "kit 1") e fica com o numero colado: 500.
+_PIECES_RE = re.compile(
+    r"(?<![\d.,])(\d{1,3}(?:\.\d{3})+|\d{1,3}(?:\s000)+|\d+)\s*(?:pe[çc]as?|p[çc]s)\b",
+    re.IGNORECASE,
+)
+# Acima disto e erro de cadastro, e estouraria a coluna INTEGER na gravacao.
+_MAX_PIECES = 100_000
 # K3: a evidencia pode estar em QUALQUER especificacao cujo nome ou valor cite
 # "inmetro" ("Certificacao Inmetro", "Registro Inmetro", "Inmetro"...) ou na
 # descricao do produto — nao so na especificacao de nome canonico.
@@ -68,11 +75,6 @@ _DESCRIPTION_CHARS_AFTER = 200
 _MAX_EVIDENCE_CHARS = 600
 # Especificacoes que costumam trazer a contagem quando o nome nao traz.
 _PIECES_SPEC_NAMES = ("componentes", "número de peças", "numero de pecas", "quantidade de peças")
-
-# Acessorios da categoria que NAO sao brinquedo-quebra-cabeca (porta-puzzle,
-# cola, moldura). Sem esta lista eles cairiam como "sem numero de pecas" e
-# poluiriam a fila de revisao do time fiscal.
-_ACCESSORY_RE = re.compile(r"^\s*(porta[-\s]|suporte\b|cola\b|moldura\b|tapete\b)", re.IGNORECASE)
 
 # Texto que os sellers usam para declarar que o item esta dispensado. Dispensa
 # declarada pelo seller NUNCA vira veredito automatico: vai para conferencia.
@@ -130,10 +132,8 @@ def parse_pieces(text: str) -> int | None:
     digits = re.sub(r"\D", "", match.group(1))
     if not digits:
         return None
-    try:
-        return int(digits)
-    except ValueError:
-        return None
+    pieces = int(digits)
+    return pieces if 0 < pieces <= _MAX_PIECES else None
 
 
 def _spec_values(product: dict) -> list[tuple[str, str]]:
@@ -247,9 +247,7 @@ def third_party_sellers(product: dict) -> list[dict]:
     return out
 
 
-def classify(
-    name: str, pieces: int | None, cert_text: str, threshold: int = DEFAULT_PIECES_THRESHOLD
-) -> tuple[str, str]:
+def classify(name: str, pieces: int | None, cert_text: str) -> tuple[str, str]:
     """Da o "ok ou nao" de um item pela evidencia publicada no site.
 
     - informacao de certificado com numero/registro reconhecivel -> OK;
@@ -385,7 +383,7 @@ def fetch_category_products(
     return produtos
 
 
-def _audit_one(product: dict, site_url: str, threshold: int) -> dict | None:
+def _audit_one(product: dict, site_url: str) -> dict | None:
     """Linha de UM produto, ou None quando nao ha seller terceiro com estoque."""
     sellers = third_party_sellers(product)
     if not sellers:
@@ -393,7 +391,7 @@ def _audit_one(product: dict, site_url: str, threshold: int) -> dict | None:
     name = str(product.get("productName") or product.get("name") or "")
     pieces = extract_pieces(product)
     cert_text = extract_inmetro_text(product)
-    verdict, reason = classify(name, pieces, cert_text, threshold)
+    verdict, reason = classify(name, pieces, cert_text)
     link = str(product.get("link") or "")
     if not link:
         link_text = str(product.get("linkText") or "")
@@ -441,9 +439,7 @@ def _unverified_row(product: object, error: Exception) -> dict | None:
     }
 
 
-def audit_batch(
-    products: list, threshold: int = DEFAULT_PIECES_THRESHOLD
-) -> tuple[list[dict], int]:
+def audit_batch(products: list) -> tuple[list[dict], int]:
     """Classifica o lote isolando cada item (K5).
 
     Um produto malformado (`None`, estoque que nao e numero, campo de tipo
@@ -461,7 +457,7 @@ def audit_batch(
         try:
             if not isinstance(product, dict):
                 raise TypeError(f"produto nao e objeto: {type(product).__name__}")
-            linha = _audit_one(product, site_url, threshold)
+            linha = _audit_one(product, site_url)
         except Exception as e:  # noqa: BLE001 - isolamento por item e o objetivo
             nao_verificados += 1
             log.warning(
@@ -473,7 +469,7 @@ def audit_batch(
     return linhas, nao_verificados
 
 
-def audit_products(products: list[dict], threshold: int = DEFAULT_PIECES_THRESHOLD) -> list[dict]:
+def audit_products(products: list[dict]) -> list[dict]:
     """Classifica os produtos de marketplace de uma lista ja lida da VTEX.
 
     Funcao PURA: e ela que os testes exercitam com as respostas reais salvas da
@@ -484,7 +480,7 @@ def audit_products(products: list[dict], threshold: int = DEFAULT_PIECES_THRESHO
         `cert_marketplace_items`. Produtos so do seller da casa ficam de fora.
         Para saber quantos itens nao puderam ser lidos, use `audit_batch`.
     """
-    return audit_batch(products, threshold)[0]
+    return audit_batch(products)[0]
 
 
 def persist_audit(rows: list[dict], run_id: str) -> int:
@@ -523,7 +519,6 @@ def summarize(rows: list[dict]) -> dict[str, int]:
 
 def run_audit(
     category_path: str = DEFAULT_CATEGORY_PATH,
-    threshold: int = DEFAULT_PIECES_THRESHOLD,
     persist: bool = True,
 ) -> dict:
     """Le a categoria na VTEX, classifica e (opcionalmente) grava.
@@ -541,7 +536,7 @@ def run_audit(
         # K7: "li e veio vazio" nao e sucesso. Sem linha gravada, a tela seguiria
         # mostrando a execucao antiga como a ultima, com toast de "concluida".
         raise EmptyCategoryError()
-    linhas, nao_verificados = audit_batch(produtos, threshold)
+    linhas, nao_verificados = audit_batch(produtos)
     if persist:
         persist_audit(linhas, run_id)
     log.info(
