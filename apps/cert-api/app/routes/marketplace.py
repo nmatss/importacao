@@ -12,6 +12,7 @@ from app.db.postgres import db
 from app.services.marketplace_audit import (
     DEFAULT_CATEGORY_PATH,
     DEFAULT_PIECES_THRESHOLD,
+    MarketplaceAuditError,
     is_valid_category_path,
     run_audit,
 )
@@ -35,7 +36,9 @@ def _remember(run_id: str, state: dict) -> None:
         _running_audits.pop(next(iter(_running_audits)))
 
 
-def _run_audit_worker(run_id: str, category_path: str, threshold: int) -> None:
+def _run_audit_worker(
+    run_id: str, category_path: str, threshold: int = DEFAULT_PIECES_THRESHOLD
+) -> None:
     state = _running_audits[run_id]
     try:
         result = run_audit(category_path=category_path, threshold=threshold)
@@ -44,10 +47,16 @@ def _run_audit_worker(run_id: str, category_path: str, threshold: int) -> None:
             summary=result["summary"],
             total=result["total"],
             scanned=result["scanned"],
+            unverified=result.get("unverified", 0),
             # O run_id que vale para consultar os itens e o gerado pelo servico.
             result_run_id=result["run_id"],
         )
+    except MarketplaceAuditError as e:
+        # Mensagem escrita por nos (ex.: categoria vazia): pode ir para a tela.
+        log.error(f"Marketplace audit {run_id} failed: {type(e).__name__}")
+        state.update(status="error", error=type(e).__name__, message=str(e))
     except Exception as e:
+        # Excecao inesperada pode carregar URL/SQL: so o tipo sai daqui.
         log.error(f"Marketplace audit {run_id} failed: {type(e).__name__}")
         state.update(status="error", error=type(e).__name__)
     finally:
@@ -144,14 +153,25 @@ def list_marketplace_items(
             params + [limit],
         )
         items = []
-        checked_at = None
         for r in cur.fetchall():
             item = dict(r)
             item["id"] = str(item["id"])
             if item.get("checked_at") is not None and hasattr(item["checked_at"], "isoformat"):
                 item["checked_at"] = item["checked_at"].isoformat()
-            checked_at = checked_at or item.get("checked_at")
             items.append(item)
+
+        # K8: a data e da EXECUCAO, nao da pagina filtrada. Tirada dos itens
+        # devolvidos, um filtro sem resultado ("Conforme (0)") zerava a data e a
+        # tela mandava rodar uma auditoria que ja tinha rodado.
+        cur.execute(
+            "SELECT MAX(checked_at) AS checked_at FROM cert_marketplace_items "
+            "WHERE run_id = %s",
+            [target],
+        )
+        run_row = cur.fetchone()
+        checked_at = run_row.get("checked_at") if run_row else None
+        if checked_at is not None and hasattr(checked_at, "isoformat"):
+            checked_at = checked_at.isoformat()
 
         # O resumo cobre a execucao inteira, nao a pagina: com `verdict` no
         # filtro, contar os itens devolvidos daria sempre 100% do veredito

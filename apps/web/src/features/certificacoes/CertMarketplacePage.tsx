@@ -8,6 +8,7 @@ import {
   fetchMarketplaceItems,
   startMarketplaceAudit,
   type CertMarketplaceItem,
+  type MarketplaceAuditState,
   type MarketplaceVerdict,
 } from '@/shared/lib/cert-api-client';
 
@@ -52,6 +53,24 @@ const VERDICT_ORDER: MarketplaceVerdict[] = ['NAO_OK', 'REVISAR', 'OK', 'NAO_EXI
 
 const POLL_MS = 3000;
 
+/**
+ * Uma execução sem linha gravada não aparece na lista: a tela continuaria
+ * mostrando a auditoria anterior como "última". O aviso fica na página (o toast
+ * some) até a próxima execução.
+ */
+function auditNotice(state: MarketplaceAuditState): string | null {
+  if (state.status === 'error') {
+    return (
+      state.message ??
+      `A auditoria falhou (${state.error ?? 'erro desconhecido'}). Nada foi gravado: a lista abaixo continua sendo a da auditoria anterior.`
+    );
+  }
+  if ((state.total ?? 0) === 0) {
+    return `A auditoria leu ${state.scanned ?? 0} produto(s) e não encontrou item de seller terceiro com estoque. Nada foi gravado: a lista abaixo continua sendo a da auditoria anterior.`;
+  }
+  return null;
+}
+
 function VerdictBadge({ verdict }: { verdict: MarketplaceVerdict }) {
   const meta = VERDICT_META[verdict] ?? VERDICT_META.REVISAR;
   return (
@@ -76,6 +95,7 @@ export default function CertMarketplacePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [auditing, setAuditing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const pollTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -109,6 +129,7 @@ export default function CertMarketplacePage() {
 
   async function handleAudit() {
     setAuditing(true);
+    setNotice(null);
     try {
       const { run_id } = await startMarketplaceAudit();
       const poll = async () => {
@@ -119,12 +140,23 @@ export default function CertMarketplacePage() {
             return;
           }
           setAuditing(false);
+          const problem = auditNotice(state);
+          setNotice(problem);
           if (state.status === 'error') {
-            toast.error(`A auditoria falhou (${state.error ?? 'erro desconhecido'}).`);
-          } else {
-            toast.success('Auditoria concluída.');
-            await load();
+            toast.error(problem ?? 'A auditoria falhou.');
+            return;
           }
+          const unverified = state.unverified ?? 0;
+          if (problem) {
+            toast.warning(problem);
+          } else if (unverified > 0) {
+            toast.warning(
+              `Auditoria concluída, mas ${unverified} produto(s) vieram malformados do site e não puderam ser verificados.`,
+            );
+          } else {
+            toast.success(`Auditoria concluída: ${state.total ?? 0} item(ns) de seller terceiro.`);
+          }
+          await load();
         } catch (err) {
           setAuditing(false);
           toast.error(getErrorMessage(err));
@@ -168,6 +200,16 @@ export default function CertMarketplacePage() {
           {auditing ? 'Auditando…' : 'Rodar auditoria'}
         </button>
       </div>
+
+      {notice && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{notice}</span>
+        </div>
+      )}
 
       {loadError && (
         <div
@@ -237,10 +279,12 @@ export default function CertMarketplacePage() {
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
             <AlertTriangle className="h-7 w-7 text-slate-300" />
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-              Nenhum item nesta seleção
+              {runId ? 'Nenhum item com esta situação na última auditoria' : 'Nenhum item auditado'}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Rode a auditoria para ler a categoria na loja.
+              {runId
+                ? 'A auditoria já rodou: escolha outra situação para ver os itens.'
+                : 'Rode a auditoria para ler a categoria na loja.'}
             </p>
           </div>
         ) : (

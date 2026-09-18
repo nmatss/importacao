@@ -880,10 +880,24 @@ export async function startMarketplaceAudit(): Promise<{ run_id: string; status:
   });
 }
 
-export async function fetchMarketplaceAudit(
-  runId: string,
-): Promise<{ run_id: string; status: string; error?: string; summary?: Record<string, number> }> {
-  return certFetch(`/api/marketplace/audit/${encodeURIComponent(runId)}`);
+export interface MarketplaceAuditState {
+  run_id: string;
+  status: string;
+  /** Nome do tipo da falha (sempre presente em `status: 'error'`). */
+  error?: string;
+  /** Texto legível da falha, só quando a API o escreveu (ex.: categoria vazia). */
+  message?: string;
+  summary?: Record<string, number>;
+  /** Itens de seller terceiro gravados nesta execução. */
+  total?: number;
+  /** Produtos lidos na categoria. */
+  scanned?: number;
+  /** Produtos malformados que não puderam ser verificados. */
+  unverified?: number;
+}
+
+export async function fetchMarketplaceAudit(runId: string): Promise<MarketplaceAuditState> {
+  return certFetch<MarketplaceAuditState>(`/api/marketplace/audit/${encodeURIComponent(runId)}`);
 }
 
 export async function deleteCertificate(id: string): Promise<{ ok: boolean }> {

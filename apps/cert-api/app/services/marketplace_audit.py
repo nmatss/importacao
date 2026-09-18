@@ -94,6 +94,25 @@ _REGISTRATION_RE = re.compile(
 )
 
 
+class MarketplaceAuditError(Exception):
+    """Falha de auditoria cuja MENSAGEM pode ir para a tela.
+
+    So as subclasses daqui tem texto escrito por nos; qualquer outra excecao
+    pode carregar URL, SQL ou credencial e so expoe o nome do tipo.
+    """
+
+
+class EmptyCategoryError(MarketplaceAuditError):
+    """A loja respondeu 200, mas a categoria nao tem nenhum produto (K7)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "A loja não devolveu nenhum produto para a categoria de quebra-cabeças. "
+            "A categoria pode ter sido renomeada no site. Nada foi gravado: a lista "
+            "abaixo continua sendo a da auditoria anterior."
+        )
+
+
 def has_certification_code(text: str) -> bool:
     """True quando o texto traz um numero de registro reconhecivel."""
     return bool(_REGISTRATION_RE.search(text or "")) or has_registration_number(text or "")
@@ -509,11 +528,19 @@ def run_audit(
 ) -> dict:
     """Le a categoria na VTEX, classifica e (opcionalmente) grava.
 
+    Raises:
+        EmptyCategoryError: a categoria veio sem nenhum produto.
+        requests.RequestException: leitura indisponivel ou incompleta.
+
     Returns:
         Dict com `run_id`, `total`, `scanned`, `unverified`, `summary` e `items`.
     """
     run_id = str(uuid.uuid4())
     produtos = fetch_category_products(category_path)
+    if not produtos:
+        # K7: "li e veio vazio" nao e sucesso. Sem linha gravada, a tela seguiria
+        # mostrando a execucao antiga como a ultima, com toast de "concluida".
+        raise EmptyCategoryError()
     linhas, nao_verificados = audit_batch(produtos, threshold)
     if persist:
         persist_audit(linhas, run_id)

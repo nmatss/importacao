@@ -607,3 +607,118 @@ def test_rate_limited_page_is_retried(mocker, no_backoff):
     )
     assert len(ma.fetch_category_products(page_size=3, sleep=0)) == 2
     assert get.call_count == 2
+
+
+# --- K7: categoria vazia e ERRO, nao "auditoria concluida" --------------------
+
+
+def test_run_audit_with_zero_products_is_an_explicit_error(mocker):
+    """Categoria renomeada devolve 200 com lista vazia: nada a gravar, e a tela
+    continuaria mostrando a execucao antiga como se fosse a ultima."""
+    mocker.patch.object(ma, "fetch_category_products", return_value=[])
+    persist = mocker.patch.object(ma, "persist_audit")
+
+    with pytest.raises(ma.EmptyCategoryError):
+        ma.run_audit()
+
+    persist.assert_not_called()
+
+
+def test_worker_turns_the_empty_category_into_a_readable_error(mocker):
+    from app.routes import marketplace
+
+    marketplace._running_audits.clear()
+    marketplace._remember("run-vazio", {"status": "running"})
+    mocker.patch.object(marketplace, "run_audit", side_effect=ma.EmptyCategoryError())
+
+    marketplace._run_audit_worker("run-vazio", ma.DEFAULT_CATEGORY_PATH)
+
+    state = marketplace._running_audits.pop("run-vazio")
+    assert state["status"] == "error"
+    assert state["error"] == "EmptyCategoryError"
+    assert "nenhum produto" in state["message"].lower()
+    assert "finished_at" in state
+
+
+def test_worker_never_leaks_the_text_of_an_unexpected_exception(mocker):
+    from app.routes import marketplace
+
+    marketplace._running_audits.clear()
+    marketplace._remember("run-x", {"status": "running"})
+    mocker.patch.object(
+        marketplace, "run_audit", side_effect=RuntimeError("postgres://user:senha@host/db")
+    )
+
+    marketplace._run_audit_worker("run-x", ma.DEFAULT_CATEGORY_PATH)
+
+    state = marketplace._running_audits.pop("run-x")
+    assert state["status"] == "error"
+    assert "senha" not in str(state)
+
+
+def test_worker_reports_scanned_total_and_unverified(mocker):
+    from app.routes import marketplace
+
+    marketplace._running_audits.clear()
+    marketplace._remember("run-ok", {"status": "running"})
+    mocker.patch.object(
+        marketplace,
+        "run_audit",
+        return_value={
+            "run_id": "svc-1", "total": 3, "scanned": 40, "unverified": 2,
+            "summary": {"OK": 1, "NAO_OK": 1, "REVISAR": 1, "NAO_EXIGE": 0}, "items": [],
+        },
+    )
+
+    marketplace._run_audit_worker("run-ok", ma.DEFAULT_CATEGORY_PATH)
+
+    state = marketplace._running_audits.pop("run-ok")
+    assert state["status"] == "completed"
+    assert (state["scanned"], state["total"], state["unverified"]) == (40, 3, 2)
+
+
+# --- K8: filtro sem resultado nao apaga a data da ultima auditoria -----------
+
+
+@pytest.mark.asyncio
+async def test_empty_filter_still_reports_when_the_run_happened(
+    test_client, api_key_headers, mocker
+):
+    from datetime import UTC, datetime
+
+    from app.routes import marketplace
+
+    mocker.patch.object(marketplace, "DATABASE_URL", "postgres://test")
+    cur = mocker.MagicMock()
+    state = {"sql": ""}
+    quando = datetime(2026, 9, 17, 12, 0, tzinfo=UTC)
+
+    def _execute(sql, params=None):
+        state["sql"] = " ".join(str(sql).split())
+
+    def _fetchone():
+        if "MAX(checked_at)" in state["sql"]:
+            return {"checked_at": quando}
+        return {"run_id": "run-1"}
+
+    def _fetchall():
+        if "GROUP BY verdict" in state["sql"]:
+            return [{"verdict": "NAO_OK", "cnt": 7}]
+        return []  # nenhum item "OK" nesta execucao
+
+    cur.execute.side_effect = _execute
+    cur.fetchone.side_effect = _fetchone
+    cur.fetchall.side_effect = _fetchall
+    ctx = mocker.MagicMock()
+    ctx.__enter__ = mocker.MagicMock(return_value=(mocker.MagicMock(), cur))
+    ctx.__exit__ = mocker.MagicMock(return_value=False)
+    mocker.patch.object(marketplace, "db", return_value=ctx)
+
+    resp = await test_client.get("/api/marketplace/items?verdict=OK", headers=api_key_headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items"] == []
+    assert body["run_id"] == "run-1"
+    assert body["summary"] == {"NAO_OK": 7}
+    assert body["checked_at"] == quando.isoformat()
