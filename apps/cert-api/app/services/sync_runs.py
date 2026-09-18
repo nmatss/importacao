@@ -58,6 +58,7 @@ def sheet_sync_lock(lock_key: int = SHEET_SYNC_LOCK_KEY) -> Generator[bool, None
 
     conn = get_conn()
     acquired = False
+    unlock_failed = False
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT pg_try_advisory_lock(%s) AS locked", [lock_key])
@@ -72,11 +73,13 @@ def sheet_sync_lock(lock_key: int = SHEET_SYNC_LOCK_KEY) -> Generator[bool, None
                     cur.execute("SELECT pg_advisory_unlock(%s)", [lock_key])
                 conn.commit()
             except Exception as e:
-                # A conexao volta ao pool mesmo assim; o lock cai sozinho quando
-                # ela for reciclada ou o processo terminar.
-                log.warning(f"Could not release sheet sync lock: {e}")
+                # O lock e de sessao: devolver esta conexao VIVA ao pool o manteria
+                # preso, e todo sync seguinte responderia "ja em andamento" ate o
+                # processo reiniciar. Fechar a conexao derruba a sessao e o lock.
+                unlock_failed = True
+                log.warning(f"Could not release sheet sync lock; closing the connection: {e}")
         try:
-            put_conn(conn)
+            put_conn(conn, close=unlock_failed)
         except Exception as e:
             log.warning(f"Could not return sheet sync connection to the pool: {e}")
 

@@ -60,7 +60,7 @@ def db() -> Generator[tuple[psycopg2.extensions.connection, psycopg2.extras.Real
         _get_pool().putconn(conn)
 
 
-def put_conn(conn: psycopg2.extensions.connection) -> None:
+def put_conn(conn: psycopg2.extensions.connection, *, close: bool = False) -> None:
     """Devolve ao pool uma conexao tomada com `get_conn`.
 
     `db()` cuida disso sozinho; este helper existe para quem precisa manter a
@@ -70,8 +70,10 @@ def put_conn(conn: psycopg2.extensions.connection) -> None:
 
     Args:
         conn: a conexao devolvida por `get_conn`.
+        close: fecha a conexao em vez de recicla-la. Lock de SESSAO que nao pode
+            ser liberado so cai com a sessao; reciclar a conexao o manteria preso.
     """
-    _get_pool().putconn(conn)
+    _get_pool().putconn(conn, close=close)
 
 
 def close_pool() -> None:

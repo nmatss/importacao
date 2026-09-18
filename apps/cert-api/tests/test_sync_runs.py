@@ -34,7 +34,7 @@ def test_lock_is_released_and_connection_returned(mocker):
     executed = " ".join(str(c.args[0]) for c in cur.execute.call_args_list)
     assert "pg_try_advisory_lock" in executed
     assert "pg_advisory_unlock" in executed
-    sync_runs.put_conn.assert_called_once_with(conn)
+    sync_runs.put_conn.assert_called_once_with(conn, close=False)
 
 
 def test_lock_not_acquired_does_not_unlock(mocker):
@@ -44,7 +44,7 @@ def test_lock_not_acquired_does_not_unlock(mocker):
         assert acquired is False
     executed = " ".join(str(c.args[0]) for c in cur.execute.call_args_list)
     assert "pg_advisory_unlock" not in executed
-    sync_runs.put_conn.assert_called_once_with(conn)
+    sync_runs.put_conn.assert_called_once_with(conn, close=False)
 
 
 def test_lock_released_even_when_the_body_raises(mocker):
@@ -53,6 +53,20 @@ def test_lock_released_even_when_the_body_raises(mocker):
         raise RuntimeError("sync falhou")
     executed = " ".join(str(c.args[0]) for c in cur.execute.call_args_list)
     assert "pg_advisory_unlock" in executed
+
+
+def test_failed_unlock_closes_the_connection_instead_of_recycling_the_lock(mocker):
+    """Lock de sessao em conexao reciclada = "ja em andamento" para sempre."""
+    conn, cur = _mock_lock_conn(mocker, locked=True)
+
+    def execute(sql, params=None):
+        if "pg_advisory_unlock" in sql:
+            raise RuntimeError("conexao em estado invalido")
+
+    cur.execute.side_effect = execute
+    with sync_runs.sheet_sync_lock() as acquired:
+        assert acquired is True
+    sync_runs.put_conn.assert_called_once_with(conn, close=True)
 
 
 def test_lock_is_a_noop_without_a_database(mocker):
